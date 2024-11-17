@@ -4,6 +4,7 @@
 
 #include <string>
 #include "DiskManager.h"
+#include <fstream>
 
 class CommandHandler {
 private:
@@ -27,6 +28,9 @@ public:
     void handleCopy(const std::string& src, const std::string& dest);
     void handleDel(const std::string& fileName);
     void handleCheck();
+
+    // 工具方法：解析路径
+    std::vector<std::string> parsePath(const std::string& path);
 };
 
 #endif // COMMANDHANDLER_H

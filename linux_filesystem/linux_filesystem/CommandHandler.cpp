@@ -2,8 +2,10 @@
 #include "CommandHandler.h"
 #include "Directory.h"
 #include "INode.h"
+#include "SuperBlock.h"
 #include <iostream>
 #include <sstream>
+#include "SuperBlock.h"
 
 void CommandHandler::handleCommand(const std::string& command) {
     std::istringstream iss(command);
@@ -62,8 +64,26 @@ void CommandHandler::handleCommand(const std::string& command) {
 }
 
 void CommandHandler::handleInfo() {
-    diskManager.initialize(); // 假设初始化会展示系统信息
-    std::cout << "System initialized." << std::endl;
+    // 读取超级块信息
+    SuperBlock superBlock;
+    std::ifstream file(diskManager.diskFile, std::ios::binary);
+    if (file.is_open()) {
+        file.seekg(0);
+        file.read(reinterpret_cast<char*>(&superBlock), sizeof(SuperBlock));
+        file.close();
+    }
+    else {
+        std::cerr << "Error: Unable to open disk file." << std::endl;
+        return;
+    }
+
+    // 打印系统信息
+    std::cout << "=== File System Information ===" << std::endl;
+    std::cout << "Total Blocks: " << superBlock.totalBlocks << std::endl;
+    std::cout << "Free Blocks: " << superBlock.freeBlocks << std::endl;
+    std::cout << "Total iNodes: " << superBlock.inodeCount << std::endl;
+    std::cout << "Root Directory iNode: " << superBlock.rootInode << std::endl;
+    std::cout << "================================" << std::endl;
 }
 
 void CommandHandler::handleCd(const std::string& path) {
@@ -109,4 +129,16 @@ void CommandHandler::handleDel(const std::string& fileName) {
 void CommandHandler::handleCheck() {
     // 逻辑：检测并恢复文件系统
     std::cout << "Checking and restoring file system." << std::endl;
+}
+
+std::vector<std::string> CommandHandler::parsePath(const std::string& path) {
+    std::vector<std::string> components;
+    std::istringstream stream(path);
+    std::string token;
+    while (std::getline(stream, token, '/')) {
+        if (!token.empty()) {
+            components.push_back(token);
+        }
+    }
+    return components;
 }

@@ -6,13 +6,12 @@
 #include <vector>
 
 class DiskManager {
-private:
+public:
     std::string diskFile;
     std::vector<bool> bitmap;  // ŒªÕº£¨π‹¿Ìø’œ–øÈ
     size_t blockSize;
     size_t totalBlocks;
 
-public:
     DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks);
 
     void initialize();

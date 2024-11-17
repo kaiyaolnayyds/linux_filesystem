@@ -4,6 +4,8 @@
 #include "INode.h"
 #include <fstream>
 #include <iostream>
+#include <cstring>
+
 
 DiskManager::DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks)
     : diskFile(diskFile), blockSize(blockSize), totalBlocks(totalBlocks) {
@@ -11,18 +13,32 @@ DiskManager::DiskManager(const std::string& diskFile, size_t blockSize, size_t t
 }
 
 void DiskManager::initialize() {
-    std::ofstream file(diskFile, std::ios::binary | std::ios::out | std::ios::in);
-    if (!file) return;
+    std::fstream file(diskFile, std::ios::binary | std::ios::out | std::ios::in);
+    if (!file.is_open()) {
+        // 如果文件不存在，创建新文件
+        file.open(diskFile, std::ios::binary | std::ios::out);
+        file.close();
+        file.open(diskFile, std::ios::binary | std::ios::out | std::ios::in);
+    }
 
+    // 如果依旧无法打开文件，输出错误信息
+    if (!file.is_open()) {
+        std::cerr << "Error: Unable to create or open disk file: " << diskFile << std::endl;
+        return;
+    }
+
+    // 初始化磁盘文件逻辑...
     file.seekp(totalBlocks * blockSize - 1);
     file.write("", 1); // 扩展文件至指定大小
 
-    SuperBlock superBlock(totalBlocks, totalBlocks, 0, 0); // 示例超级块
+    // 写入超级块
+    SuperBlock superBlock(totalBlocks, totalBlocks, 0, 0); // 假设初始无i节点，根目录在0号块
     file.seekp(0);
     file.write(reinterpret_cast<char*>(&superBlock), sizeof(SuperBlock));
 
     file.close();
 }
+
 
 void DiskManager::readBlock(size_t blockIndex, char* buffer) {
     if (blockIndex >= totalBlocks) return;
