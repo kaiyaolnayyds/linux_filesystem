@@ -64,20 +64,9 @@ void CommandHandler::handleCommand(const std::string& command) {
 }
 
 void CommandHandler::handleInfo() {
-    // 读取超级块信息
-    SuperBlock superBlock;
-    std::ifstream file(diskManager.diskFile, std::ios::binary);
-    if (file.is_open()) {
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(&superBlock), sizeof(SuperBlock));
-        file.close();
-    }
-    else {
-        std::cerr << "Error: Unable to open disk file." << std::endl;
-        return;
-    }
+    SuperBlock superBlock = diskManager.loadSuperBlock();
 
-    // 打印系统信息
+    // 打印超级块信息
     std::cout << "=== File System Information ===" << std::endl;
     std::cout << "Total Blocks: " << superBlock.totalBlocks << std::endl;
     std::cout << "Free Blocks: " << superBlock.freeBlocks << std::endl;
@@ -86,10 +75,29 @@ void CommandHandler::handleInfo() {
     std::cout << "================================" << std::endl;
 }
 
+
 void CommandHandler::handleCd(const std::string& path) {
-    // 逻辑：改变当前目录（假设有相关逻辑在DiskManager中）
-    std::cout << "Changing directory to: " << path << std::endl;
+    try {
+        std::vector<std::string> components = parsePath(path); // 解析路径
+        uint32_t currentInode = 0; // 从根目录开始
+        Directory tempDirectory = currentDirectory; // 临时目录对象
+
+        for (const auto& component : components) {
+            uint32_t nextInode = tempDirectory.findEntry(component); // 查找子目录
+            char buffer[1024];
+            diskManager.readBlock(nextInode, buffer); // 从磁盘读取子目录数据
+            tempDirectory = *reinterpret_cast<Directory*>(buffer); // 更新当前目录
+        }
+
+        currentDirectory = tempDirectory; // 更新当前目录
+        std::cout << "Changed to directory: " << path << "." << std::endl;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error changing directory: " << e.what() << std::endl;
+    }
 }
+
+
 
 void CommandHandler::handleDir(const std::string& path) {
     // 逻辑：显示目录内容
@@ -97,9 +105,30 @@ void CommandHandler::handleDir(const std::string& path) {
 }
 
 void CommandHandler::handleMd(const std::string& dirName) {
-    // 逻辑：创建新目录
-    std::cout << "Creating directory: " << dirName << std::endl;
+    try {
+        size_t blockIndex = diskManager.allocateBlock(); // 分配块
+        if (blockIndex == static_cast<size_t>(-1)) {
+            std::cerr << "Error: No free blocks available to create directory." << std::endl;
+            return;
+        }
+
+        currentDirectory.addEntry(dirName, static_cast<uint32_t>(blockIndex));
+        std::cout << "Directory '" << dirName << "' created at block " << blockIndex << "." << std::endl;
+
+        // 加载和更新超级块
+        SuperBlock superBlock = diskManager.loadSuperBlock();
+        superBlock.freeBlocks -= 1; // 减少空闲块
+        superBlock.inodeCount += 1; // 增加 iNode 数量
+        diskManager.updateSuperBlock(superBlock);
+
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error creating directory: " << e.what() << std::endl;
+    }
 }
+
+
+
 
 void CommandHandler::handleRd(const std::string& dirName) {
     // 逻辑：删除目录及其内容

@@ -24,3 +24,12 @@ void SuperBlock::loadFromFile(const std::string& diskFile) {
         file.close();
     }
 }
+
+void SuperBlock::updateFreeBlocks(int change) {
+    freeBlocks += change;
+}
+
+void SuperBlock::updateInodeCount(int change) {
+    inodeCount += change;
+}
+

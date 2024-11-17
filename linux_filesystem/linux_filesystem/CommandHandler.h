@@ -5,10 +5,12 @@
 #include <string>
 #include "DiskManager.h"
 #include <fstream>
+#include "Directory.h"
 
 class CommandHandler {
 private:
-    DiskManager& diskManager;
+    DiskManager& diskManager; // 磁盘管理器
+    Directory currentDirectory; // 当前目录对象
 
 public:
     // 构造函数

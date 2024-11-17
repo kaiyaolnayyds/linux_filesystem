@@ -4,6 +4,9 @@
 
 #include <string>
 #include <unordered_map>
+#include <cstring>
+#include "DiskManager.h"
+
 
 struct DirectoryEntry {
     std::string name;
@@ -14,11 +17,12 @@ struct DirectoryEntry {
 
 class Directory {
 public:
-    std::unordered_map<std::string, uint32_t> entries;
+  
+    std::unordered_map<std::string, uint32_t> entries; // 映射名称到i节点索引
 
-    void addEntry(const std::string& name, uint32_t inodeIndex);
-    void removeEntry(const std::string& name);
-    uint32_t findEntry(const std::string& name);
+    void addEntry(const std::string& name, uint32_t inodeIndex); // 添加目录条目
+    void removeEntry(const std::string& name); // 删除目录条目
+    uint32_t findEntry(const std::string& name); // 查找目录条目
 };
 
 #endif // DIRECTORY_H
