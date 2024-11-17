@@ -1,0 +1,32 @@
+# 设置CMake最低版本和项目名称
+cmake_minimum_required(VERSION 3.10)
+project(simdisk_project)
+
+# 设置C++标准
+set(CMAKE_CXX_STANDARD 17)
+
+# 包含头文件目录
+include_directories(include)
+
+# 添加源文件
+set(SOURCE_FILES
+    src/main.cpp
+    src/CommandHandler.cpp
+    src/Directory.cpp
+    src/DiskManager.cpp
+    src/INode.cpp
+    src/SuperBlock.cpp
+)
+
+# 添加可执行文件并指定输出路径
+(simdisk_project ${SOURCE_FILES})
+
+# 设置可执行文件输出目录
+set_target_properties(simdisk_project PROPERTIES
+RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${CMAKE_SYSTEM_PROCESSOR}/${CMAKE_BUILD_TYPE}"
+)
+
+# 设置编译生成的中间文件（对象文件）的输出目录
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/obj/${CMAKE_SYSTEM_PROCESSOR}/${CMAKE_BUILD_TYPE}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/obj/${CMAKE_SYSTEM_PROCESSOR}/${CMAKE_BUILD_TYPE}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${CMAKE_SYSTEM_PROCESSOR}/${CMAKE_BUILD_TYPE}")
