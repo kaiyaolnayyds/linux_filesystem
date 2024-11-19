@@ -5,8 +5,10 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include "SuperBlock.h"
 #include "Directory.h"
+#include "SuperBlock.h"
+#include "INode.h"
+
 
 class DiskManager {
 public:
@@ -15,6 +17,7 @@ public:
     size_t bitmapSize;        // 位图大小（字节数）
     size_t blockSize;    //块大小
     size_t totalBlocks;  //块总数
+    SuperBlock superBlock;  // 超级快成员变量
 
     DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks);
 
@@ -46,6 +49,12 @@ public:
 
     //加载超级块
     SuperBlock loadSuperBlock();
+
+    //写入INode
+    void writeINode(uint32_t inodeIndex, const INode& inode);
+
+    //读取INode
+    INode readINode(uint32_t inodeIndex);
 };
 
 #endif // DISKMANAGER_H

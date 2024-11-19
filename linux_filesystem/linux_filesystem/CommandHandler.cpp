@@ -1,12 +1,31 @@
 // src/CommandHandler.cpp
 #include "CommandHandler.h"
-#include "Directory.h"
-#include "INode.h"
-#include "SuperBlock.h"
 #include <iostream>
 #include <sstream>
-#include "SuperBlock.h"
 
+
+CommandHandler::CommandHandler(DiskManager& dm) : diskManager(dm) {
+    // 加载根目录
+    SuperBlock superBlock = diskManager.loadSuperBlock();
+    uint32_t rootInode = superBlock.rootInode;
+
+    // 读取根目录的 inode
+    currentInodeIndex = rootInode;
+    INode rootInodeObj = diskManager.readINode(rootInode);
+
+    // 从磁盘读取根目录数据
+    char buffer[diskManager.blockSize];
+    diskManager.readBlock(rootInodeObj.blockIndex, buffer);
+
+    // 反序列化根目录
+    currentDirectory.deserialize(buffer, diskManager.blockSize);
+
+    // 调试输出
+    std::cout << "[DEBUG] Loaded current directory entries:" << std::endl;
+    for (const auto& entry : currentDirectory.entries) {
+        std::cout << "  " << entry.first << " -> inode " << entry.second << std::endl;
+    }
+}
 
 
 void CommandHandler::handleCommand(const std::string& command) {
@@ -23,9 +42,21 @@ void CommandHandler::handleCommand(const std::string& command) {
         handleCd(path);
     }
     else if (cmd == "dir") {
+        std::string arg;
+        bool recursive = false;
         std::string path;
-        iss >> path;
-        handleDir(path);
+
+        // 解析所有参数
+        while (iss >> arg) {
+            if (arg == "/s") {
+                recursive = true;
+            }
+            else {
+                path = arg;
+            }
+        }
+
+        handleDir(path, recursive);
     }
     else if (cmd == "md") {
         std::string dirName;
@@ -101,10 +132,71 @@ void CommandHandler::handleCd(const std::string& path) {
 
 
 
-void CommandHandler::handleDir(const std::string& path) {
-    // 逻辑：显示目录内容
-    std::cout << "Listing directory: " << path << std::endl;
+void CommandHandler::handleDir(const std::string& path, bool recursive) {
+    // 确定要显示的目录
+    Directory dirToDisplay = currentDirectory;
+    uint32_t dirInodeIndex = currentInodeIndex;
+
+    if (!path.empty()) {
+        // 查找指定的路径
+        // 这里需要实现路径解析（例如支持相对路径、绝对路径）
+        // 为简化，假设只支持当前目录下的直接子目录
+        auto it = currentDirectory.entries.find(path);
+        if (it != currentDirectory.entries.end()) {
+            uint32_t inodeIndex = it->second;
+            INode inode = diskManager.readINode(inodeIndex);
+            if (inode.type != 1) {
+                std::cout << path << " is not a directory." << std::endl;
+                return;
+            }
+            // 读取目录内容
+            char buffer[diskManager.blockSize];
+            diskManager.readBlock(inode.blockIndex, buffer);
+            dirToDisplay.deserialize(buffer, diskManager.blockSize);
+            dirInodeIndex = inodeIndex;
+        }
+        else {
+            std::cout << "Directory not found: " << path << std::endl;
+            return;
+        }
+    }
+
+    // 显示目录内容
+    displayDirectoryContents(dirToDisplay, dirInodeIndex, recursive, "");
 }
+
+void CommandHandler::displayDirectoryContents(const Directory& dir, uint32_t dirInodeIndex, bool recursive, const std::string& indent) {
+    if (dir.entries.empty()) {
+        std::cout << indent << "Directory is empty." << std::endl;
+    }
+    else {
+        for (const auto& entry : dir.entries) {
+            const std::string& name = entry.first;
+            uint32_t inodeIndex = entry.second;
+            INode inode = diskManager.readINode(inodeIndex);
+
+            // 显示文件名、物理地址、保护码、文件长度、子目录等
+            std::string typeStr = (inode.type == 1) ? "<DIR>" : "<FILE>";
+            std::cout << indent << typeStr << " " << name
+                << " [Addr: " << inode.blockIndex
+                << ", Mode: " << std::oct << inode.mode << std::dec
+                << ", Size: " << inode.size << "]" << std::endl;
+
+            // 如果是目录且需要递归
+            if (recursive && inode.type == 1) {
+                // 读取子目录内容
+                Directory subDir;
+                char buffer[diskManager.blockSize];
+                diskManager.readBlock(inode.blockIndex, buffer);
+                subDir.deserialize(buffer, diskManager.blockSize);
+
+                // 递归显示子目录内容
+                displayDirectoryContents(subDir, inodeIndex, recursive, indent + "  ");
+            }
+        }
+    }
+}
+
 
 void CommandHandler::handleMd(const std::string& dirName) {
     try {
@@ -128,9 +220,6 @@ void CommandHandler::handleMd(const std::string& dirName) {
         std::cerr << "Error creating directory: " << e.what() << std::endl;
     }
 }
-
-
-
 
 
 
@@ -175,3 +264,4 @@ std::vector<std::string> CommandHandler::parsePath(const std::string& path) {
     }
     return components;
 }
+

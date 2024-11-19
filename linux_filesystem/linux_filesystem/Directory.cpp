@@ -20,8 +20,6 @@ void Directory::addEntry(const std::string& name, uint32_t inodeIndex, DiskManag
 
 
 
-
-
 void Directory::removeEntry(const std::string& name) {
     auto it = entries.find(name);
     if (it != entries.end()) {
@@ -41,15 +39,20 @@ uint32_t Directory::findEntry(const std::string& name) {
 }
 
 void Directory::serialize(std::vector<char>& buffer, size_t blockSize) const {
-    // 清空缓冲区
     buffer.clear();
+    buffer.reserve(blockSize);
 
-    // 序列化 entries 的大小
+    size_t offset = 0;
+
+    // 序列化 entries 的数量
     uint32_t entryCount = static_cast<uint32_t>(entries.size());
     buffer.insert(buffer.end(), reinterpret_cast<const char*>(&entryCount), reinterpret_cast<const char*>(&entryCount) + sizeof(uint32_t));
 
     // 序列化每个目录项
-    for (const auto& [name, inodeIndex] : entries) {
+    for (const auto& entry : entries) {
+        const std::string& name = entry.first;
+        uint32_t inodeIndex = entry.second;
+
         // 序列化名称长度和名称
         uint32_t nameLength = static_cast<uint32_t>(name.length());
         buffer.insert(buffer.end(), reinterpret_cast<const char*>(&nameLength), reinterpret_cast<const char*>(&nameLength) + sizeof(uint32_t));
@@ -59,14 +62,12 @@ void Directory::serialize(std::vector<char>& buffer, size_t blockSize) const {
         buffer.insert(buffer.end(), reinterpret_cast<const char*>(&inodeIndex), reinterpret_cast<const char*>(&inodeIndex) + sizeof(uint32_t));
     }
 
-    // 填充至块大小
+    // 填充到块大小
     if (buffer.size() < blockSize) {
         buffer.resize(blockSize, 0);
     }
-    else if (buffer.size() > blockSize) {
-        throw std::runtime_error("Serialized directory data exceeds block size");
-    }
 }
+
 
 
 
@@ -86,8 +87,9 @@ void Directory::deserialize(const char* data, size_t size) {
 
     // 反序列化每个目录项
     for (uint32_t i = 0; i < entryCount; ++i) {
-        // 检查剩余数据是否足够
         if (offset + sizeof(uint32_t) > size) throw std::runtime_error("Corrupted directory data");
+
+        // 反序列化名称长度
         uint32_t nameLength = 0;
         std::memcpy(&nameLength, data + offset, sizeof(uint32_t));
         offset += sizeof(uint32_t);

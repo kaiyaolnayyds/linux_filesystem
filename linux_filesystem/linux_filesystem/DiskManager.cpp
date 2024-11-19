@@ -5,18 +5,18 @@
 #include <fstream>
 #include <iostream>
 #include <cstring>
-
+#include  "SuperBlock.h"
 
 DiskManager::DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks)
     : diskFile(diskFile), blockSize(blockSize), totalBlocks(totalBlocks) {
-    // 计算位图大小（以字节为单位），每个字节8位
     bitmapSize = (totalBlocks + 7) / 8;
     bitmap.resize(bitmapSize, 0);
 
-    // 如果磁盘文件存在，加载位图和超级块
-    std::ifstream fileCheck(diskFile);
+    // 检查磁盘文件是否存在
+    std::ifstream fileCheck(diskFile, std::ios::binary);
     if (fileCheck.good()) {
-        loadSuperBlock();
+        // 加载超级块和位图
+        superBlock = loadSuperBlock();
         loadBitmap();
         std::cout << "[DEBUG] Disk file exists. Loaded SuperBlock and bitmap." << std::endl;
     }
@@ -26,46 +26,71 @@ DiskManager::DiskManager(const std::string& diskFile, size_t blockSize, size_t t
     fileCheck.close();
 }
 
+
 void DiskManager::initialize() {
-    // 打开文件并清空内容
-    std::ofstream file(diskFile, std::ios::binary | std::ios::trunc);
+    // 仅在磁盘文件不存在时创建并初始化
+    std::ifstream diskFileCheck(diskFile, std::ios::binary);
+    if (diskFileCheck.good()) {
+        // 磁盘文件已存在，不需要重新初始化
+        diskFileCheck.close();
+        return;
+    }
+    diskFileCheck.close();
+
+    // 打开磁盘文件用于写入
+    std::ofstream file(diskFile, std::ios::binary);
     if (!file.is_open()) {
         std::cerr << "Error: Unable to create disk file." << std::endl;
         return;
     }
 
     // 初始化超级块
-    SuperBlock superBlock(static_cast<uint32_t>(totalBlocks), static_cast<uint32_t>(totalBlocks), 0, 0);
+    superBlock = SuperBlock(static_cast<uint32_t>(totalBlocks), static_cast<uint32_t>(totalBlocks), 0, 0);
+
+    // 计算超级块和位图的大小
+    size_t superBlockSize = sizeof(SuperBlock);
+    bitmapSize = (totalBlocks + 7) / 8;
+
+    // 在超级块中设置 inodeStartAddress
+    superBlock.inodeStartAddress = static_cast<uint32_t>(superBlockSize + bitmapSize);
 
     // 初始化位图（所有块空闲）
     bitmap.assign(bitmapSize, 0);
 
-    // 分配根目录块
-    size_t rootBlockIndex = allocateBlock();
+    // 为根目录的数据分配一个块
+    size_t rootBlockIndex = allocateBlock(); // 这将更新位图
     if (rootBlockIndex == static_cast<size_t>(-1)) {
         std::cerr << "Error: Unable to allocate block for root directory." << std::endl;
         return;
     }
 
+    // 创建根目录的 inode
+    uint32_t rootInodeIndex = superBlock.inodeCount++;
+    INode rootInode;
+    rootInode.size = 0;
+    rootInode.mode = 0755; // 目录的默认权限
+    rootInode.type = 1;    // 目录
+    rootInode.blockIndex = static_cast<uint32_t>(rootBlockIndex);
+    rootInode.inodeIndex = rootInodeIndex;
+
     // 更新超级块
     superBlock.freeBlocks = static_cast<uint32_t>(totalBlocks - 1);
-    superBlock.rootInode = static_cast<uint32_t>(rootBlockIndex);
+    superBlock.rootInode = rootInodeIndex;
+
+    // 将超级块写入磁盘
     updateSuperBlock(superBlock);
 
-    // 更新位图
+    // 将位图写入磁盘
     updateBitmap();
 
-    // 初始化磁盘块（可选，已在 writeBlock 中处理）
-    // ...
+    // 将根目录的 inode 写入磁盘
+    writeINode(rootInodeIndex, rootInode);
 
     // 创建空的根目录并写入磁盘
     Directory rootDirectory;
     std::vector<char> buffer;
     rootDirectory.serialize(buffer, blockSize);
     writeBlock(rootBlockIndex, buffer.data());
-
-    // 调试信息
-    std::cout << "[DEBUG] Root directory created at block " << rootBlockIndex << "." << std::endl;
 
     // 关闭文件
     file.close();
@@ -76,6 +101,7 @@ void DiskManager::initialize() {
     std::cout << "Free Blocks: " << superBlock.freeBlocks << std::endl;
     std::cout << "iNode Count: " << superBlock.inodeCount << std::endl;
     std::cout << "[DEBUG] Bitmap size: " << bitmapSize << " bytes." << std::endl;
+
 }
 
 
@@ -160,50 +186,37 @@ void DiskManager::printBitmap() const {
     std::cout << std::endl;
 }
 
-void DiskManager::updateSuperBlock(const SuperBlock& superBlock) {
-    std::fstream file(diskFile, std::ios::binary | std::ios::in | std::ios::out);
-    if (file.is_open()) {
-        file.seekp(0, std::ios::beg);
-        file.write(reinterpret_cast<const char*>(&superBlock.totalBlocks), sizeof(uint32_t));
-        file.write(reinterpret_cast<const char*>(&superBlock.freeBlocks), sizeof(uint32_t));
-        file.write(reinterpret_cast<const char*>(&superBlock.inodeCount), sizeof(uint32_t));
-        file.write(reinterpret_cast<const char*>(&superBlock.rootInode), sizeof(uint32_t));
-        file.close();
+void DiskManager::updateSuperBlock(const SuperBlock& sb) {
+    std::ofstream file(diskFile, std::ios::binary | std::ios::in | std::ios::out);
+    if (!file.is_open()) {
+        std::cerr << "Error: Unable to open disk file for writing superblock." << std::endl;
+        return;
+    }
+    char buffer[sizeof(SuperBlock)];
+    sb.serialize(buffer);
+    file.seekp(0);
+    file.write(buffer, sizeof(SuperBlock));
+    file.close();
 
-        // 调试信息
-        std::cout << "[DEBUG] SuperBlock updated on disk:" << std::endl;
-        std::cout << "Total Blocks: " << superBlock.totalBlocks << std::endl;
-        std::cout << "Free Blocks: " << superBlock.freeBlocks << std::endl;
-        std::cout << "iNode Count: " << superBlock.inodeCount << std::endl;
-    }
-    else {
-        std::cerr << "Error: Unable to update super block." << std::endl;
-    }
+    superBlock = sb; // 更新成员变量
 }
 
 
 
-
 SuperBlock DiskManager::loadSuperBlock() {
+    SuperBlock sb;
     std::ifstream file(diskFile, std::ios::binary);
-    SuperBlock superBlock;
-    if (file.is_open()) {
-        file.seekg(0, std::ios::beg);
-        file.read(reinterpret_cast<char*>(&superBlock.totalBlocks), sizeof(uint32_t));
-        file.read(reinterpret_cast<char*>(&superBlock.freeBlocks), sizeof(uint32_t));
-        file.read(reinterpret_cast<char*>(&superBlock.inodeCount), sizeof(uint32_t));
-        file.read(reinterpret_cast<char*>(&superBlock.rootInode), sizeof(uint32_t));
-        file.close();
-        // 调试信息
-        std::cout << "[DEBUG] SuperBlock loaded from disk:" << std::endl;
-        std::cout << "Total Blocks: " << superBlock.totalBlocks << std::endl;
-        std::cout << "Free Blocks: " << superBlock.freeBlocks << std::endl;
-        std::cout << "iNode Count: " << superBlock.inodeCount << std::endl;
+    if (!file.is_open()) {
+        std::cerr << "Error: Unable to open disk file for reading superblock." << std::endl;
+        return sb;
     }
-    else {
-        std::cerr << "Error: Unable to load super block." << std::endl;
-    }
-    return superBlock;
+    char buffer[sizeof(SuperBlock)];
+    file.read(buffer, sizeof(SuperBlock));
+    file.close();
+
+    sb.deserialize(buffer);
+    superBlock = sb; // 更新成员变量
+    return sb;
 }
 
 
@@ -241,3 +254,44 @@ void DiskManager::updateBitmap() {
     file.close();
 }
 
+// 定义 INode 的序列化大小
+constexpr size_t INODE_SIZE = sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t); // 总计15字节
+
+void DiskManager::writeINode(uint32_t inodeIndex, const INode& inode) {
+    char buffer[INODE_SIZE];
+    inode.serialize(buffer);
+
+    // 计算 inode 在磁盘文件中的偏移量
+    size_t offset = superBlock.inodeStartAddress + inodeIndex * INODE_SIZE;
+
+    // 打开文件并写入 inode
+    std::fstream file(diskFile, std::ios::binary | std::ios::in | std::ios::out);
+    if (!file.is_open()) {
+        std::cerr << "Error: Unable to open disk file for writing inode." << std::endl;
+        return;
+    }
+    file.seekp(offset);
+    file.write(buffer, INODE_SIZE);
+    file.close();
+}
+
+INode DiskManager::readINode(uint32_t inodeIndex) {
+    INode inode;
+    char buffer[INODE_SIZE];
+
+    // 计算 inode 在磁盘文件中的偏移量
+    size_t offset = superBlock.inodeStartAddress + inodeIndex * INODE_SIZE;
+
+    // 打开文件并读取 inode
+    std::ifstream file(diskFile, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Error: Unable to open disk file for reading inode." << std::endl;
+        return inode;
+    }
+    file.seekg(offset);
+    file.read(buffer, INODE_SIZE);
+    file.close();
+
+    inode.deserialize(buffer);
+    return inode;
+}

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <cstring>
 
 class SuperBlock {
 public:
@@ -12,8 +13,11 @@ public:
     uint32_t inodeCount;
     uint32_t rootInode;
 
+    uint32_t inodeStartAddress;  // inode 区域在磁盘上的起始地址
+
     // 构造函数
-    SuperBlock(uint32_t total = 0, uint32_t free = 0, uint32_t inodes = 0, uint32_t root = 0);
+    SuperBlock();
+    SuperBlock(uint32_t totalBlocks, uint32_t freeBlocks, uint32_t inodeCount, uint32_t rootInode);
 
     // 将超级块数据保存到文件
     void saveToFile(const std::string& diskFile);
@@ -23,6 +27,10 @@ public:
 
     void updateFreeBlocks(int change); // 增加或减少空闲块数
     void updateInodeCount(int change); // 增加或减少i节点数量
+
+    // 序列化和反序列化方法
+    void serialize(char* buffer) const;
+    void deserialize(const char* buffer);
 
 };
 
