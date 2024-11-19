@@ -9,6 +9,8 @@
 #include "SuperBlock.h"
 #include "INode.h"
 
+constexpr size_t SUPERBLOCK_SIZE = sizeof(uint32_t) * 5; // SuperBlock 的固定大小
+constexpr size_t INODE_SIZE = sizeof(uint32_t) * 4 + sizeof(uint16_t) + sizeof(uint8_t); // INode 的固定大小
 
 class DiskManager {
 public:
@@ -18,6 +20,7 @@ public:
     size_t blockSize;    //块大小
     size_t totalBlocks;  //块总数
     SuperBlock superBlock;  // 超级快成员变量
+   
 
     DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks);
 

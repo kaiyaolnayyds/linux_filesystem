@@ -28,31 +28,29 @@ DiskManager::DiskManager(const std::string& diskFile, size_t blockSize, size_t t
 
 
 void DiskManager::initialize() {
-    // 仅在磁盘文件不存在时创建并初始化
-    std::ifstream diskFileCheck(diskFile, std::ios::binary);
-    if (diskFileCheck.good()) {
-        // 磁盘文件已存在，不需要重新初始化
-        diskFileCheck.close();
-        return;
-    }
-    diskFileCheck.close();
-
-    // 打开磁盘文件用于写入
-    std::ofstream file(diskFile, std::ios::binary);
+    // 打开磁盘文件用于写入，使用 trunc 模式清空文件
+    std::ofstream file(diskFile, std::ios::binary | std::ios::out | std::ios::trunc);
     if (!file.is_open()) {
         std::cerr << "Error: Unable to create disk file." << std::endl;
         return;
     }
 
+    // **预分配磁盘文件大小**
+    size_t diskFileSize = totalBlocks * blockSize;
+    file.seekp(diskFileSize - 1);
+    file.write("", 1); // 写入一个字节，以确保文件大小
+    file.close();
+
     // 初始化超级块
     superBlock = SuperBlock(static_cast<uint32_t>(totalBlocks), static_cast<uint32_t>(totalBlocks), 0, 0);
 
     // 计算超级块和位图的大小
-    size_t superBlockSize = sizeof(SuperBlock);
+    size_t superBlockSize = SUPERBLOCK_SIZE; // 使用固定大小
     bitmapSize = (totalBlocks + 7) / 8;
 
-    // 在超级块中设置 inodeStartAddress
+    // 设置超级块中的 inodeStartAddress
     superBlock.inodeStartAddress = static_cast<uint32_t>(superBlockSize + bitmapSize);
+    std::cout << "[DEBUG] inodeStartAddress: " << superBlock.inodeStartAddress << std::endl;
 
     // 初始化位图（所有块空闲）
     bitmap.assign(bitmapSize, 0);
@@ -92,17 +90,9 @@ void DiskManager::initialize() {
     rootDirectory.serialize(buffer, blockSize);
     writeBlock(rootBlockIndex, buffer.data());
 
-    // 关闭文件
-    file.close();
-
-    // 调试信息
-    std::cout << "[DEBUG] SuperBlock initialized with:" << std::endl;
-    std::cout << "Total Blocks: " << superBlock.totalBlocks << std::endl;
-    std::cout << "Free Blocks: " << superBlock.freeBlocks << std::endl;
-    std::cout << "iNode Count: " << superBlock.inodeCount << std::endl;
-    std::cout << "[DEBUG] Bitmap size: " << bitmapSize << " bytes." << std::endl;
-
+    // 不需要关闭文件，因为我们在函数开头已经关闭了
 }
+
 
 
 
@@ -255,7 +245,8 @@ void DiskManager::updateBitmap() {
 }
 
 // 定义 INode 的序列化大小
-constexpr size_t INODE_SIZE = sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t); // 总计15字节
+//constexpr size_t INODE_SIZE = sizeof(uint32_t) * 4 + sizeof(uint16_t) + sizeof(uint8_t);
+
 
 void DiskManager::writeINode(uint32_t inodeIndex, const INode& inode) {
     char buffer[INODE_SIZE];
@@ -263,6 +254,7 @@ void DiskManager::writeINode(uint32_t inodeIndex, const INode& inode) {
 
     // 计算 inode 在磁盘文件中的偏移量
     size_t offset = superBlock.inodeStartAddress + inodeIndex * INODE_SIZE;
+    std::cout << "[DEBUG] writeINode: inodeIndex=" << inodeIndex << ", offset=" << offset << std::endl;
 
     // 打开文件并写入 inode
     std::fstream file(diskFile, std::ios::binary | std::ios::in | std::ios::out);
@@ -271,9 +263,18 @@ void DiskManager::writeINode(uint32_t inodeIndex, const INode& inode) {
         return;
     }
     file.seekp(offset);
+    if (file.fail()) {
+        std::cerr << "Error: Failed to seek to position " << offset << " in disk file." << std::endl;
+        file.close();
+        return;
+    }
     file.write(buffer, INODE_SIZE);
+    if (file.fail()) {
+        std::cerr << "Error: Failed to write inode to disk file." << std::endl;
+    }
     file.close();
 }
+
 
 INode DiskManager::readINode(uint32_t inodeIndex) {
     INode inode;
@@ -281,6 +282,7 @@ INode DiskManager::readINode(uint32_t inodeIndex) {
 
     // 计算 inode 在磁盘文件中的偏移量
     size_t offset = superBlock.inodeStartAddress + inodeIndex * INODE_SIZE;
+    std::cout << "[DEBUG] readINode: inodeIndex=" << inodeIndex << ", offset=" << offset << std::endl;
 
     // 打开文件并读取 inode
     std::ifstream file(diskFile, std::ios::binary);
@@ -289,9 +291,20 @@ INode DiskManager::readINode(uint32_t inodeIndex) {
         return inode;
     }
     file.seekg(offset);
+    if (file.fail()) {
+        std::cerr << "Error: Failed to seek to position " << offset << " in disk file." << std::endl;
+        file.close();
+        return inode;
+    }
     file.read(buffer, INODE_SIZE);
+    if (file.gcount() != INODE_SIZE) {
+        std::cerr << "Error: Failed to read complete inode from disk file." << std::endl;
+        file.close();
+        return inode;
+    }
     file.close();
 
     inode.deserialize(buffer);
     return inode;
 }
+

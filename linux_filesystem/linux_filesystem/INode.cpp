@@ -21,7 +21,6 @@ size_t INode::getBlockCount() const {
     return blocks.size();
 }
 
-
 void INode::serialize(char* buffer) const {
     size_t offset = 0;
     std::memcpy(buffer + offset, &size, sizeof(uint32_t));
@@ -34,7 +33,6 @@ void INode::serialize(char* buffer) const {
     offset += sizeof(uint32_t);
     std::memcpy(buffer + offset, &inodeIndex, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    // 如果有其他元数据，继续序列化
 }
 
 void INode::deserialize(const char* buffer) {
@@ -49,5 +47,4 @@ void INode::deserialize(const char* buffer) {
     offset += sizeof(uint32_t);
     std::memcpy(&inodeIndex, buffer + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
-    // 如果有其他元数据，继续反序列化
 }

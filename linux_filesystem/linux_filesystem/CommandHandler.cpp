@@ -5,17 +5,17 @@
 
 
 CommandHandler::CommandHandler(DiskManager& dm) : diskManager(dm) {
-    // 加载根目录
+    // 加载超级块
     SuperBlock superBlock = diskManager.loadSuperBlock();
-    uint32_t rootInode = superBlock.rootInode;
+    uint32_t rootInodeIndex = superBlock.rootInode;
+    currentInodeIndex = rootInodeIndex;
 
     // 读取根目录的 inode
-    currentInodeIndex = rootInode;
-    INode rootInodeObj = diskManager.readINode(rootInode);
+    INode rootInode = diskManager.readINode(rootInodeIndex);
 
     // 从磁盘读取根目录数据
     char buffer[diskManager.blockSize];
-    diskManager.readBlock(rootInodeObj.blockIndex, buffer);
+    diskManager.readBlock(rootInode.blockIndex, buffer);
 
     // 反序列化根目录
     currentDirectory.deserialize(buffer, diskManager.blockSize);
@@ -26,6 +26,7 @@ CommandHandler::CommandHandler(DiskManager& dm) : diskManager(dm) {
         std::cout << "  " << entry.first << " -> inode " << entry.second << std::endl;
     }
 }
+
 
 
 void CommandHandler::handleCommand(const std::string& command) {
@@ -175,6 +176,10 @@ void CommandHandler::displayDirectoryContents(const Directory& dir, uint32_t dir
             uint32_t inodeIndex = entry.second;
             INode inode = diskManager.readINode(inodeIndex);
 
+            // 调试输出 inode 信息
+            std::cout << "[DEBUG] INode for '" << name << "': size=" << inode.size << ", mode=" << inode.mode
+                << ", type=" << static_cast<int>(inode.type) << ", blockIndex=" << inode.blockIndex << ", inodeIndex=" << inode.inodeIndex << std::endl;
+
             // 显示文件名、物理地址、保护码、文件长度、子目录等
             std::string typeStr = (inode.type == 1) ? "<DIR>" : "<FILE>";
             std::cout << indent << typeStr << " " << name
@@ -198,28 +203,66 @@ void CommandHandler::displayDirectoryContents(const Directory& dir, uint32_t dir
 }
 
 
+
 void CommandHandler::handleMd(const std::string& dirName) {
-    try {
-        size_t blockIndex = diskManager.allocateBlock(); // 分配块
-        if (blockIndex == static_cast<size_t>(-1)) {
-            std::cerr << "Error: No free blocks available to create directory." << std::endl;
-            return;
-        }
-
-        currentDirectory.addEntry(dirName, static_cast<uint32_t>(blockIndex), diskManager);
-        std::cout << "Directory '" << dirName << "' created at block " << blockIndex << "." << std::endl;
-
-        // 加载和更新超级块
-        SuperBlock superBlock = diskManager.loadSuperBlock();
-        superBlock.freeBlocks -= 1; // 减少空闲块
-        superBlock.inodeCount += 1; // 增加 iNode 数量
-        diskManager.updateSuperBlock(superBlock);
-
+    // 检查目录是否已存在
+    if (currentDirectory.entries.find(dirName) != currentDirectory.entries.end()) {
+        std::cout << "Directory '" << dirName << "' already exists." << std::endl;
+        return;
     }
-    catch (const std::exception& e) {
-        std::cerr << "Error creating directory: " << e.what() << std::endl;
+
+    // 分配一个新的 inode
+    uint32_t newInodeIndex = diskManager.superBlock.inodeCount++;
+    INode newInode;
+    newInode.size = 0;
+    newInode.mode = 0755; // 默认权限
+    newInode.type = 1;    // 目录类型
+    newInode.inodeIndex = newInodeIndex;
+
+    // 分配一个新的数据块给新目录
+    size_t newBlockIndex = diskManager.allocateBlock();
+    if (newBlockIndex == static_cast<size_t>(-1)) {
+        std::cout << "Failed to allocate block for new directory." << std::endl;
+        return;
     }
+    newInode.blockIndex = static_cast<uint32_t>(newBlockIndex);
+
+    // 更新超级块
+    diskManager.superBlock.freeBlocks--;
+    diskManager.updateSuperBlock(diskManager.superBlock);
+
+    // 将新目录的 inode 写入磁盘
+    diskManager.writeINode(newInodeIndex, newInode);
+
+    // 创建空的目录并写入磁盘
+    Directory newDirectory;
+    std::vector<char> buffer;
+    newDirectory.serialize(buffer, diskManager.blockSize);
+    diskManager.writeBlock(newInode.blockIndex, buffer.data());
+
+    // 更新当前目录的 entries
+    currentDirectory.entries[dirName] = newInodeIndex;
+
+    // **将更新后的当前目录写回磁盘**
+    // 获取当前目录的 inode
+    INode currentDirInode = diskManager.readINode(currentInodeIndex);
+
+    // 序列化当前目录并写入磁盘
+    buffer.clear();
+    currentDirectory.serialize(buffer, diskManager.blockSize);
+    diskManager.writeBlock(currentDirInode.blockIndex, buffer.data());
+
+    // 将当前目录的 inode 写回磁盘（如果需要更新 size 等信息）
+    diskManager.writeINode(currentInodeIndex, currentDirInode);
+
+    // 调试输出新目录的 inode 信息
+    std::cout << "[DEBUG] New directory INode: size=" << newInode.size << ", mode=" << newInode.mode
+        << ", type=" << static_cast<int>(newInode.type) << ", blockIndex=" << newInode.blockIndex
+        << ", inodeIndex=" << newInode.inodeIndex << std::endl;
+
+    std::cout << "Directory '" << dirName << "' created at block " << newBlockIndex << "." << std::endl;
 }
+
 
 
 
