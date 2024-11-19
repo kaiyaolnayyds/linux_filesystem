@@ -7,6 +7,8 @@
 #include <sstream>
 #include "SuperBlock.h"
 
+
+
 void CommandHandler::handleCommand(const std::string& command) {
     std::istringstream iss(command);
     std::string cmd;
@@ -112,7 +114,7 @@ void CommandHandler::handleMd(const std::string& dirName) {
             return;
         }
 
-        currentDirectory.addEntry(dirName, static_cast<uint32_t>(blockIndex));
+        currentDirectory.addEntry(dirName, static_cast<uint32_t>(blockIndex), diskManager);
         std::cout << "Directory '" << dirName << "' created at block " << blockIndex << "." << std::endl;
 
         // 加载和更新超级块
@@ -126,6 +128,8 @@ void CommandHandler::handleMd(const std::string& dirName) {
         std::cerr << "Error creating directory: " << e.what() << std::endl;
     }
 }
+
+
 
 
 

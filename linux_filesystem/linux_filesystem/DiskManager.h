@@ -4,14 +4,17 @@
 
 #include <string>
 #include <vector>
+#include <cstdint>
 #include "SuperBlock.h"
+#include "Directory.h"
 
 class DiskManager {
 public:
     std::string diskFile;
-    std::vector<bool> bitmap;  // 位图，管理空闲块
-    size_t blockSize;
-    size_t totalBlocks;
+    std::vector<uint8_t> bitmap;    // 位图，使用uint8_t存储
+    size_t bitmapSize;        // 位图大小（字节数）
+    size_t blockSize;    //块大小
+    size_t totalBlocks;  //块总数
 
     DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks);
 
@@ -32,9 +35,16 @@ public:
     // 用于调试，输出当前位图状态
     void printBitmap() const;
 
+    //加载位图
+    void loadBitmap();
 
+    //更新位图
+    void updateBitmap();
+
+    //更新超级块
     void updateSuperBlock(const SuperBlock& superBlock);
 
+    //加载超级块
     SuperBlock loadSuperBlock();
 };
 

@@ -14,7 +14,19 @@ private:
 
 public:
     // 构造函数
-    CommandHandler(DiskManager& dm) : diskManager(dm) {}
+   CommandHandler(DiskManager& dm) : diskManager(dm) {
+    // 加载根目录
+    SuperBlock superBlock = diskManager.loadSuperBlock();
+    uint32_t rootInode = superBlock.rootInode;
+
+    // 从磁盘读取根目录数据
+    char buffer[diskManager.blockSize];
+    diskManager.readBlock(rootInode, buffer);
+
+    // 反序列化根目录
+    currentDirectory.deserialize(buffer, diskManager.blockSize);
+}
+
 
     // 处理命令的方法
     void handleCommand(const std::string& command);
