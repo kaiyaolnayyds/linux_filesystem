@@ -111,24 +111,84 @@ void CommandHandler::handleInfo() {
 
 
 void CommandHandler::handleCd(const std::string& path) {
-    try {
-        std::vector<std::string> components = parsePath(path); // 解析路径
-        uint32_t currentInode = 0; // 从根目录开始
-        Directory tempDirectory = currentDirectory; // 临时目录对象
+    if (path.empty()) {
+        std::cout << "Usage: cd <path>" << std::endl;
+        return;
+    }
 
-        for (const auto& component : components) {
-            uint32_t nextInode = tempDirectory.findEntry(component); // 查找子目录
-            char buffer[1024];
-            diskManager.readBlock(nextInode, buffer); // 从磁盘读取子目录数据
-            tempDirectory = *reinterpret_cast<Directory*>(buffer); // 更新当前目录
+    // 解析路径
+    std::vector<std::string> components = parsePath(path);
+
+    // 判断是否为绝对路径
+    bool isAbsolutePath = !path.empty() && path[0] == '/';
+
+    uint32_t startInodeIndex;
+    Directory startDirectory;
+
+    if (isAbsolutePath) {
+        // 从根目录开始
+        startInodeIndex = diskManager.superBlock.rootInode;
+        if (!getDirectory(startInodeIndex, startDirectory)) {
+            std::cout << "Error: Unable to load root directory." << std::endl;
+            return;
         }
+    }
+    else {
+        // 从当前目录开始
+        startInodeIndex = currentInodeIndex;
+        startDirectory = currentDirectory;
+    }
 
-        currentDirectory = tempDirectory; // 更新当前目录
-        std::cout << "Changed to directory: " << path << "." << std::endl;
+    uint32_t targetInodeIndex = startInodeIndex;
+    Directory targetDirectory = startDirectory;
+
+    for (const std::string& component : components) {
+        if (component == ".") {
+            // 当前目录，跳过
+            continue;
+        }
+        else if (component == "..") {
+            // 上级目录
+            if (targetInodeIndex == diskManager.superBlock.rootInode) {
+                // 已经是根目录，无法返回上级
+                continue;
+            }
+            targetInodeIndex = targetDirectory.parentInodeIndex;
+            if (!getDirectory(targetInodeIndex, targetDirectory)) {
+                std::cout << "Error: Unable to load parent directory." << std::endl;
+                return;
+            }
+        }
+        else {
+            auto it = targetDirectory.entries.find(component);
+            if (it == targetDirectory.entries.end()) {
+                // 未找到目录
+                std::cout << "Directory not found: " << component << std::endl;
+                return;
+            }
+
+            uint32_t inodeIndex = it->second;
+            INode inode = diskManager.readINode(inodeIndex);
+
+            if (inode.type != 1) {
+                // 不是目录
+                std::cout << component << " is not a directory." << std::endl;
+                return;
+            }
+
+            if (!getDirectory(inodeIndex, targetDirectory)) {
+                std::cout << "Error: Unable to load directory " << component << std::endl;
+                return;
+            }
+
+            targetInodeIndex = inodeIndex;
+        }
     }
-    catch (const std::exception& e) {
-        std::cerr << "Error changing directory: " << e.what() << std::endl;
-    }
+
+    // 更新当前目录
+    currentInodeIndex = targetInodeIndex;
+    currentDirectory = targetDirectory;
+    std::cout << "Changed directory to: " << path << std::endl;
 }
 
 
@@ -202,6 +262,76 @@ void CommandHandler::displayDirectoryContents(const Directory& dir, uint32_t dir
     }
 }
 
+bool CommandHandler::findDirectory(const std::vector<std::string>& pathComponents, uint32_t& resultInodeIndex, Directory& resultDirectory)
+{
+    uint32_t inodeIndex = (pathComponents.empty() || pathComponents[0].empty()) ? diskManager.superBlock.rootInode : currentInodeIndex;
+    Directory directory;
+
+    if (!getDirectory(inodeIndex, directory)) {
+        return false;
+    }
+
+    for (const std::string& component : pathComponents) {
+        if (component == ".") {
+            // 当前目录，跳过
+            continue;
+        }
+        else if (component == "..") {
+            // 上级目录，暂未实现，简单处理为根目录
+            inodeIndex = diskManager.superBlock.rootInode;
+            if (!getDirectory(inodeIndex, directory)) {
+                return false;
+            }
+            continue;
+        }
+        else {
+            auto it = directory.entries.find(component);
+            if (it == directory.entries.end()) {
+                // 未找到目录
+                return false;
+            }
+
+            inodeIndex = it->second;
+            INode inode = diskManager.readINode(inodeIndex);
+
+            if (inode.type != 1) {
+                // 不是目录
+                return false;
+            }
+
+            if (!getDirectory(inodeIndex, directory)) {
+                return false;
+            }
+        }
+    }
+
+    resultInodeIndex = inodeIndex;
+    resultDirectory = directory;
+    return true;
+}
+
+bool CommandHandler::getDirectory(uint32_t inodeIndex, Directory& directory)
+{
+    INode inode = diskManager.readINode(inodeIndex);
+
+    if (inode.type != 1) {
+        return false;
+    }
+
+    char buffer[diskManager.blockSize];
+    diskManager.readBlock(inode.blockIndex, buffer);
+
+    try {
+        directory.deserialize(buffer, diskManager.blockSize);
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error deserializing directory: " << e.what() << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 
 
 void CommandHandler::handleMd(const std::string& dirName) {
@@ -234,8 +364,13 @@ void CommandHandler::handleMd(const std::string& dirName) {
     // 将新目录的 inode 写入磁盘
     diskManager.writeINode(newInodeIndex, newInode);
 
-    // 创建空的目录并写入磁盘
+    // 创建新目录，添加 `.` 和 `..` 条目
     Directory newDirectory;
+    newDirectory.parentInodeIndex = currentInodeIndex; // 设置父目录的 inodeIndex
+    newDirectory.entries["."] = newInodeIndex;         // 当前目录
+    newDirectory.entries[".."] = currentInodeIndex;    // 父目录
+
+    // 将新目录序列化并写入磁盘
     std::vector<char> buffer;
     newDirectory.serialize(buffer, diskManager.blockSize);
     diskManager.writeBlock(newInode.blockIndex, buffer.data());
@@ -243,7 +378,7 @@ void CommandHandler::handleMd(const std::string& dirName) {
     // 更新当前目录的 entries
     currentDirectory.entries[dirName] = newInodeIndex;
 
-    // **将更新后的当前目录写回磁盘**
+    // 将更新后的当前目录写回磁盘
     // 获取当前目录的 inode
     INode currentDirInode = diskManager.readINode(currentInodeIndex);
 
@@ -262,6 +397,7 @@ void CommandHandler::handleMd(const std::string& dirName) {
 
     std::cout << "Directory '" << dirName << "' created at block " << newBlockIndex << "." << std::endl;
 }
+
 
 
 
@@ -307,4 +443,3 @@ std::vector<std::string> CommandHandler::parsePath(const std::string& path) {
     }
     return components;
 }
-

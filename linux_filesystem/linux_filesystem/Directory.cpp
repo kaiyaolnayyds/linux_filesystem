@@ -44,6 +44,9 @@ void Directory::serialize(std::vector<char>& buffer, size_t blockSize) const {
 
     size_t offset = 0;
 
+    // 序列化 parentInodeIndex
+    buffer.insert(buffer.end(), reinterpret_cast<const char*>(&parentInodeIndex), reinterpret_cast<const char*>(&parentInodeIndex) + sizeof(uint32_t));
+
     // 序列化 entries 的数量
     uint32_t entryCount = static_cast<uint32_t>(entries.size());
     buffer.insert(buffer.end(), reinterpret_cast<const char*>(&entryCount), reinterpret_cast<const char*>(&entryCount) + sizeof(uint32_t));
@@ -68,17 +71,18 @@ void Directory::serialize(std::vector<char>& buffer, size_t blockSize) const {
     }
 }
 
-
-
-
 void Directory::deserialize(const char* data, size_t size) {
     size_t offset = 0;
     entries.clear();
 
     // 检查数据大小
-    if (size < sizeof(uint32_t)) {
+    if (size < sizeof(uint32_t) * 2) {
         throw std::runtime_error("Insufficient data for deserialization");
     }
+
+    // 反序列化 parentInodeIndex
+    std::memcpy(&parentInodeIndex, data + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // 反序列化 entries 的数量
     uint32_t entryCount = 0;

@@ -36,7 +36,14 @@ public:
     // 工具方法：解析路径
     std::vector<std::string> parsePath(const std::string& path);
 
+    // 显示目录内容
     void displayDirectoryContents(const Directory& dir, uint32_t dirInodeIndex, bool recursive, const std::string& indent);
+
+    // 新增：根据路径查找目录
+    bool findDirectory(const std::vector<std::string>& pathComponents, uint32_t& resultInodeIndex, Directory& resultDirectory);
+
+    // 新增：获取指定 inodeIndex 的目录
+    bool getDirectory(uint32_t inodeIndex, Directory& directory);
 };
 
 #endif // COMMANDHANDLER_H
