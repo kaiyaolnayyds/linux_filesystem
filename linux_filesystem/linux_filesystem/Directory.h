@@ -25,7 +25,8 @@ public:
     // 添加父目录的 inodeIndex
     uint32_t parentInodeIndex;
 
-    void addEntry(const std::string& name, uint32_t inodeIndex, DiskManager& diskManager); // 添加目录条目
+    void addEntry(const std::string& name, uint32_t inodeIndex, DiskManager& diskManager, uint32_t dirInodeIndex); // 添加目录条目
+
 
     void removeEntry(const std::string& name); // 删除目录条目
 

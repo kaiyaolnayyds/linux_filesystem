@@ -4,7 +4,7 @@
 #include "DiskManager.h"
 
 
-void Directory::addEntry(const std::string& name, uint32_t inodeIndex, DiskManager& diskManager) {
+void Directory::addEntry(const std::string& name, uint32_t inodeIndex, DiskManager& diskManager, uint32_t dirInodeIndex) {
     if (entries.find(name) != entries.end()) {
         throw std::runtime_error("Entry already exists: " + name);
     }
@@ -14,9 +14,13 @@ void Directory::addEntry(const std::string& name, uint32_t inodeIndex, DiskManag
     std::vector<char> buffer;
     serialize(buffer, diskManager.blockSize);
 
-    // 将序列化数据写入磁盘
-    diskManager.writeBlock(inodeIndex, buffer.data());
+    // 获取该目录的 inode
+    INode dirInode = diskManager.readINode(dirInodeIndex);
+
+    // 将序列化数据写入该目录的块
+    diskManager.writeBlock(dirInode.blockIndex, buffer.data());
 }
+
 
 
 
@@ -40,36 +44,41 @@ uint32_t Directory::findEntry(const std::string& name) {
 
 void Directory::serialize(std::vector<char>& buffer, size_t blockSize) const {
     buffer.clear();
-    buffer.reserve(blockSize);
+    buffer.resize(blockSize, 0); // 确保缓冲区大小为 blockSize
 
     size_t offset = 0;
 
     // 序列化 parentInodeIndex
-    buffer.insert(buffer.end(), reinterpret_cast<const char*>(&parentInodeIndex), reinterpret_cast<const char*>(&parentInodeIndex) + sizeof(uint32_t));
+    std::memcpy(buffer.data() + offset, &parentInodeIndex, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // 序列化 entries 的数量
     uint32_t entryCount = static_cast<uint32_t>(entries.size());
-    buffer.insert(buffer.end(), reinterpret_cast<const char*>(&entryCount), reinterpret_cast<const char*>(&entryCount) + sizeof(uint32_t));
+    std::memcpy(buffer.data() + offset, &entryCount, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // 序列化每个目录项
     for (const auto& entry : entries) {
         const std::string& name = entry.first;
         uint32_t inodeIndex = entry.second;
 
-        // 序列化名称长度和名称
+        // 序列化名称长度
         uint32_t nameLength = static_cast<uint32_t>(name.length());
-        buffer.insert(buffer.end(), reinterpret_cast<const char*>(&nameLength), reinterpret_cast<const char*>(&nameLength) + sizeof(uint32_t));
-        buffer.insert(buffer.end(), name.begin(), name.end());
+        std::memcpy(buffer.data() + offset, &nameLength, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+
+        // 序列化名称
+        std::memcpy(buffer.data() + offset, name.data(), nameLength);
+        offset += nameLength;
 
         // 序列化 inodeIndex
-        buffer.insert(buffer.end(), reinterpret_cast<const char*>(&inodeIndex), reinterpret_cast<const char*>(&inodeIndex) + sizeof(uint32_t));
+        std::memcpy(buffer.data() + offset, &inodeIndex, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
     }
 
-    // 填充到块大小
-    if (buffer.size() < blockSize) {
-        buffer.resize(blockSize, 0);
-    }
+    // 剩余的缓冲区已在 resize 时填充为零
 }
+
 
 void Directory::deserialize(const char* data, size_t size) {
     size_t offset = 0;
@@ -91,14 +100,18 @@ void Directory::deserialize(const char* data, size_t size) {
 
     // 反序列化每个目录项
     for (uint32_t i = 0; i < entryCount; ++i) {
-        if (offset + sizeof(uint32_t) > size) throw std::runtime_error("Corrupted directory data");
+        if (offset + sizeof(uint32_t) > size) {
+            throw std::runtime_error("Corrupted directory data (name length)");
+        }
 
         // 反序列化名称长度
         uint32_t nameLength = 0;
         std::memcpy(&nameLength, data + offset, sizeof(uint32_t));
         offset += sizeof(uint32_t);
 
-        if (offset + nameLength + sizeof(uint32_t) > size) throw std::runtime_error("Corrupted directory data");
+        if (offset + nameLength + sizeof(uint32_t) > size) {
+            throw std::runtime_error("Corrupted directory data (name and inodeIndex)");
+        }
 
         // 反序列化名称
         std::string name(data + offset, nameLength);

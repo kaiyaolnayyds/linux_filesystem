@@ -84,13 +84,20 @@ void DiskManager::initialize() {
     // 将根目录的 inode 写入磁盘
     writeINode(rootInodeIndex, rootInode);
 
-    // 创建空的根目录并写入磁盘
+    // 创建根目录，并设置 parentInodeIndex 和目录项
     Directory rootDirectory;
+    rootDirectory.parentInodeIndex = rootInodeIndex; // 根目录的父节点指向自身
+
+    // 添加 `.` 和 `..` 目录项
+    rootDirectory.entries["."] = rootInodeIndex;
+    rootDirectory.entries[".."] = rootInodeIndex;
+
+    // 序列化根目录并写入磁盘
     std::vector<char> buffer;
     rootDirectory.serialize(buffer, blockSize);
     writeBlock(rootBlockIndex, buffer.data());
 
-    // 不需要关闭文件，因为我们在函数开头已经关闭了
+  
 }
 
 

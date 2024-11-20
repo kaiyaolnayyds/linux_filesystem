@@ -310,8 +310,7 @@ bool CommandHandler::findDirectory(const std::vector<std::string>& pathComponent
     return true;
 }
 
-bool CommandHandler::getDirectory(uint32_t inodeIndex, Directory& directory)
-{
+bool CommandHandler::getDirectory(uint32_t inodeIndex, Directory& directory) {
     INode inode = diskManager.readINode(inodeIndex);
 
     if (inode.type != 1) {
@@ -323,6 +322,8 @@ bool CommandHandler::getDirectory(uint32_t inodeIndex, Directory& directory)
 
     try {
         directory.deserialize(buffer, diskManager.blockSize);
+        // 添加调试信息
+        std::cout << "[DEBUG] getDirectory: inodeIndex=" << inodeIndex << ", parentInodeIndex=" << directory.parentInodeIndex << std::endl;
     }
     catch (const std::exception& e) {
         std::cerr << "Error deserializing directory: " << e.what() << std::endl;
@@ -331,6 +332,7 @@ bool CommandHandler::getDirectory(uint32_t inodeIndex, Directory& directory)
 
     return true;
 }
+
 
 
 
@@ -375,20 +377,22 @@ void CommandHandler::handleMd(const std::string& dirName) {
     newDirectory.serialize(buffer, diskManager.blockSize);
     diskManager.writeBlock(newInode.blockIndex, buffer.data());
 
+    // **在更新 currentDirectory 前，保存 parentInodeIndex**
+    uint32_t parentInodeIdx = currentDirectory.parentInodeIndex;
+
     // 更新当前目录的 entries
     currentDirectory.entries[dirName] = newInodeIndex;
 
-    // 将更新后的当前目录写回磁盘
-    // 获取当前目录的 inode
-    INode currentDirInode = diskManager.readINode(currentInodeIndex);
+    // **恢复 parentInodeIndex**
+    currentDirectory.parentInodeIndex = parentInodeIdx;
 
-    // 序列化当前目录并写入磁盘
+    // 将更新后的当前目录序列化并写回磁盘
     buffer.clear();
     currentDirectory.serialize(buffer, diskManager.blockSize);
-    diskManager.writeBlock(currentDirInode.blockIndex, buffer.data());
+    diskManager.writeBlock(diskManager.readINode(currentInodeIndex).blockIndex, buffer.data());
 
-    // 将当前目录的 inode 写回磁盘（如果需要更新 size 等信息）
-    diskManager.writeINode(currentInodeIndex, currentDirInode);
+    // 如果需要，更新当前目录的 inode
+    diskManager.writeINode(currentInodeIndex, diskManager.readINode(currentInodeIndex));
 
     // 调试输出新目录的 inode 信息
     std::cout << "[DEBUG] New directory INode: size=" << newInode.size << ", mode=" << newInode.mode
