@@ -10,7 +10,8 @@
 #include "INode.h"
 
 constexpr size_t SUPERBLOCK_SIZE = sizeof(uint32_t) * 5; // SuperBlock 的固定大小
-constexpr size_t INODE_SIZE = sizeof(uint32_t) * 4 + sizeof(uint16_t) + sizeof(uint8_t); // INode 的固定大小
+constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t); // 应为22字节
+
 
 class DiskManager {
 public:
@@ -25,10 +26,11 @@ public:
     DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks);
 
     void initialize();
+
     void readBlock(size_t blockIndex, char* buffer);
+
     void writeBlock(size_t blockIndex, const char* data);
     
-
     // 分配空闲块，返回块索引
     size_t allocateBlock();
 

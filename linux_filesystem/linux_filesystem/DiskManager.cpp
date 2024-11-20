@@ -48,7 +48,7 @@ void DiskManager::initialize() {
     size_t superBlockSize = SUPERBLOCK_SIZE; // 使用固定大小
     bitmapSize = (totalBlocks + 7) / 8;
 
-    // 设置超级块中的 inodeStartAddress
+    // inodeStartAddress 应该是超级块大小加上位图大小
     superBlock.inodeStartAddress = static_cast<uint32_t>(superBlockSize + bitmapSize);
     std::cout << "[DEBUG] inodeStartAddress: " << superBlock.inodeStartAddress << std::endl;
 
@@ -103,7 +103,8 @@ void DiskManager::readBlock(size_t blockIndex, char* buffer) {
     if (!file) return;
 
     // 计算正确的文件偏移，跳过SuperBlock和位图
-    std::streampos offset = sizeof(SuperBlock) + bitmapSize + blockIndex * blockSize;
+    //std::streampos offset = sizeof(SuperBlock) + bitmapSize + blockIndex * blockSize;
+    std::streampos offset = superBlock.inodeStartAddress + superBlock.inodeCount * INODE_SIZE + blockIndex * blockSize;
     file.seekg(offset);
     file.read(buffer, blockSize);
     file.close();
@@ -117,7 +118,8 @@ void DiskManager::writeBlock(size_t blockIndex, const char* data) {
     if (!file) return;
 
     // 计算正确的文件偏移，跳过SuperBlock和位图
-    std::streampos offset = sizeof(SuperBlock) + bitmapSize + blockIndex * blockSize;
+    //std::streampos offset = sizeof(SuperBlock) + bitmapSize + blockIndex * blockSize;
+    std::streampos offset = superBlock.inodeStartAddress + superBlock.inodeCount * INODE_SIZE + blockIndex * blockSize;
     file.seekp(offset);
     file.write(data, blockSize);
     file.close();

@@ -10,15 +10,17 @@
 
 class DiskManager; // 前向声明
 
+#pragma pack(push, 1)
 class INode {
 public:
     uint32_t size;                  // 文件大小
+    uint32_t blockIndex;         // 物理地址（数据块索引）
+    uint32_t inodeIndex;         // INode 的索引（用于唯一标识）
     uint16_t mode;                 // 保护码（权限）
     uint32_t type;                  // 文件类型（0: 文件, 1: 目录）
     uint32_t permissions;           // 权限
     std::vector<uint32_t> blocks;   // 数据块指针
-    uint32_t blockIndex;         // 物理地址（数据块索引）
-    uint32_t inodeIndex;         // INode 的索引（用于唯一标识）
+
     // 其他需要的元数据，例如时间戳等
 
     // 构造函数
@@ -37,5 +39,6 @@ public:
     void serialize(char* buffer) const;
     void deserialize(const char* buffer);
 };
+#pragma pack(pop)
 
 #endif // INODE_H
