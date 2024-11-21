@@ -10,10 +10,9 @@ class SuperBlock {
 public:
     uint32_t totalBlocks;
     uint32_t freeBlocks;
-    uint32_t inodeCount;
+    uint32_t inodeStartAddress;
     uint32_t rootInode;
-
-    uint32_t inodeStartAddress;  // inode 区域在磁盘上的起始地址
+    uint32_t inodeCount; // 一定要包含这个字段
 
     // 构造函数
     SuperBlock();

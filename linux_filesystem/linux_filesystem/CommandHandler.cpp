@@ -346,7 +346,8 @@ void CommandHandler::handleMd(const std::string& dirName) {
     }
 
     // 分配一个新的 inode
-    uint32_t newInodeIndex = diskManager.superBlock.inodeCount++;
+    uint32_t newInodeIndex = diskManager.superBlock.inodeCount;
+    diskManager.superBlock.inodeCount++; // 递增 inodeCount
     INode newInode;
     newInode.size = 0;
     newInode.mode = 0755; // 默认权限
@@ -361,7 +362,7 @@ void CommandHandler::handleMd(const std::string& dirName) {
     }
     newInode.blockIndex = static_cast<uint32_t>(newBlockIndex);
 
-    // **更新超级块，包括 inodeCount 和 freeBlocks**
+    // 更新超级块，包括 inodeCount 和 freeBlocks
     diskManager.superBlock.freeBlocks--;
     diskManager.updateSuperBlock(diskManager.superBlock);
 

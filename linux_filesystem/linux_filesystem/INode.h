@@ -8,8 +8,6 @@
 #include <vector>
 #include <cstring>
 
-#define INODE_SIZE 24
-
 class DiskManager; // 前向声明
 
 #pragma pack(push, 1)
@@ -18,7 +16,7 @@ public:
     uint32_t size;                  // 文件大小
     uint32_t blockIndex;         // 物理地址（数据块索引）
     uint32_t inodeIndex;         // INode 的索引（用于唯一标识）
-    uint32_t mode;                 // 保护码（权限）
+    uint16_t mode;                 // 保护码（权限）
     uint32_t type;                  // 文件类型（0: 文件, 1: 目录）
     uint32_t permissions;           // 权限
     std::vector<uint32_t> blocks;   // 数据块指针
