@@ -20,6 +20,9 @@ CommandHandler::CommandHandler(DiskManager& dm) : diskManager(dm) {
     // 反序列化根目录
     currentDirectory.deserialize(buffer, diskManager.blockSize);
 
+    // 设置 currentDirectory 的 inodeIndex
+    currentDirectory.inodeIndex = currentInodeIndex;
+
     // 调试输出
     std::cout << "[DEBUG] Loaded current directory entries:" << std::endl;
     for (const auto& entry : currentDirectory.entries) {
@@ -188,6 +191,7 @@ void CommandHandler::handleCd(const std::string& path) {
     // 更新当前目录
     currentInodeIndex = targetInodeIndex;
     currentDirectory = targetDirectory;
+    currentDirectory.inodeIndex = currentInodeIndex; // 设置 inodeIndex
     std::cout << "Changed directory to: " << path << std::endl;
 }
 
@@ -334,8 +338,6 @@ bool CommandHandler::getDirectory(uint32_t inodeIndex, Directory& directory) {
 }
 
 
-
-
 void CommandHandler::handleMd(const std::string& dirName) {
     // 检查目录是否已存在
     if (currentDirectory.entries.find(dirName) != currentDirectory.entries.end()) {
@@ -359,7 +361,7 @@ void CommandHandler::handleMd(const std::string& dirName) {
     }
     newInode.blockIndex = static_cast<uint32_t>(newBlockIndex);
 
-    // 更新超级块
+    // **更新超级块，包括 inodeCount 和 freeBlocks**
     diskManager.superBlock.freeBlocks--;
     diskManager.updateSuperBlock(diskManager.superBlock);
 
@@ -368,6 +370,7 @@ void CommandHandler::handleMd(const std::string& dirName) {
 
     // 创建新目录，添加 `.` 和 `..` 条目
     Directory newDirectory;
+    newDirectory.inodeIndex = newInodeIndex;       // 设置新目录的 inodeIndex
     newDirectory.parentInodeIndex = currentInodeIndex; // 设置父目录的 inodeIndex
     newDirectory.entries["."] = newInodeIndex;         // 当前目录
     newDirectory.entries[".."] = currentInodeIndex;    // 父目录
@@ -377,22 +380,35 @@ void CommandHandler::handleMd(const std::string& dirName) {
     newDirectory.serialize(buffer, diskManager.blockSize);
     diskManager.writeBlock(newInode.blockIndex, buffer.data());
 
-    // **在更新 currentDirectory 前，保存 parentInodeIndex**
-    uint32_t parentInodeIdx = currentDirectory.parentInodeIndex;
-
     // 更新当前目录的 entries
     currentDirectory.entries[dirName] = newInodeIndex;
 
-    // **恢复 parentInodeIndex**
-    currentDirectory.parentInodeIndex = parentInodeIdx;
+    // **读取当前目录的 INode**
+    INode currentInode = diskManager.readINode(currentInodeIndex);
+
+    // **更新当前目录的 INode（如需要）**
+    // 假设更新 size，您可以根据需要更新其他字段
+    // 在序列化后，获取目录数据的大小
+    size_t directoryDataSize = buffer.size();
+
+    // 更新 currentInode 的 size 字段
+    currentInode.size = static_cast<uint32_t>(directoryDataSize);
+
+
+    //currentInode.size = currentDirectory.entries.size(); // 或者根据实际情况计算 size
+
+    // **将更新后的 INode 写回磁盘**
+    diskManager.writeINode(currentInodeIndex, currentInode);
 
     // 将更新后的当前目录序列化并写回磁盘
     buffer.clear();
     currentDirectory.serialize(buffer, diskManager.blockSize);
-    diskManager.writeBlock(diskManager.readINode(currentInodeIndex).blockIndex, buffer.data());
 
-    // 如果需要，更新当前目录的 inode
-    diskManager.writeINode(currentInodeIndex, diskManager.readINode(currentInodeIndex));
+    // **使用当前目录的 INode 的 blockIndex**
+    diskManager.writeBlock(currentInode.blockIndex, buffer.data());
+
+    // 更新 currentDirectory 的 inodeIndex
+    currentDirectory.inodeIndex = currentInodeIndex;
 
     // 调试输出新目录的 inode 信息
     std::cout << "[DEBUG] New directory INode: size=" << newInode.size << ", mode=" << newInode.mode
@@ -401,7 +417,6 @@ void CommandHandler::handleMd(const std::string& dirName) {
 
     std::cout << "Directory '" << dirName << "' created at block " << newBlockIndex << "." << std::endl;
 }
-
 
 
 

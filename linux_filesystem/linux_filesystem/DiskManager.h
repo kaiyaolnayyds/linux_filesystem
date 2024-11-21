@@ -10,7 +10,8 @@
 #include "INode.h"
 
 constexpr size_t SUPERBLOCK_SIZE = sizeof(uint32_t) * 5; // SuperBlock 的固定大小
-constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t); // 应为22字节
+//constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t); // 应为22字节
+#define MAX_INODES 1024 // 根据需要调整
 
 
 class DiskManager {
@@ -22,6 +23,8 @@ public:
     size_t totalBlocks;  //块总数
     SuperBlock superBlock;  // 超级快成员变量
    
+    // **添加 `dataBlocksStartAddress` 成员变量**
+    size_t dataBlocksStartAddress;  // 数据块在磁盘文件中的起始地址
 
     DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks);
 

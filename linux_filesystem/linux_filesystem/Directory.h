@@ -3,9 +3,12 @@
 #define DIRECTORY_H
 
 #include <string>
+#include<iostream>
 #include <unordered_map>
 #include <cstring>
 #include<vector>
+
+
 
 // 前置声明 DiskManager 类
 class DiskManager;
@@ -22,10 +25,13 @@ public:
   
     std::unordered_map<std::string, uint32_t> entries; // 映射名称到i节点索引
 
+    uint32_t inodeIndex; // 当前目录的 inodeIndex
+
     // 添加父目录的 inodeIndex
     uint32_t parentInodeIndex;
 
-    void addEntry(const std::string& name, uint32_t inodeIndex, DiskManager& diskManager, uint32_t dirInodeIndex); // 添加目录条目
+    void addEntry(const std::string& name, uint32_t inodeIndex, DiskManager& diskManager); // 添加目录条目
+
 
 
     void removeEntry(const std::string& name); // 删除目录条目
@@ -37,8 +43,10 @@ public:
 
     // **声明反序列化函数**
     void deserialize(const char* data, size_t size);
-    
 
+    // 计算最大目录项数量
+    size_t getMaxEntries(size_t blockSize) const;
+    
 };
 
 #endif // DIRECTORY_H
