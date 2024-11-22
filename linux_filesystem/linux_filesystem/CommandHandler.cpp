@@ -226,7 +226,7 @@ void CommandHandler::handleCd(const std::string& path) {
 
 
 std::vector<std::string> CommandHandler::parsePath(const std::string& path) {
-    path;
+    
     std::vector<std::string> components;
     if (path.empty()) {
         return components;
