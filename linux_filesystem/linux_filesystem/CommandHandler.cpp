@@ -365,6 +365,10 @@ bool CommandHandler::deleteDirectoryRecursively(uint32_t inodeIndex) {
     // 释放数据块
     diskManager.freeBlock(inode.blockIndex);
 
+    // 更新超级块
+    diskManager.superBlock.freeBlocks++;
+    diskManager.updateSuperBlock(diskManager.superBlock);
+
     // 释放 inode
     diskManager.freeINode(inodeIndex);
 
@@ -448,7 +452,7 @@ void CommandHandler::handleMd(const std::string& dirName) {
 
 
 void CommandHandler::handleRd(const std::string& dirName) {
-    // 首先，在当前目录中查找要删除的目录的 inode 索引
+    // 在当前目录中查找要删除的目录的 inode 索引
     auto it = currentDirectory.entries.find(dirName);
     if (it == currentDirectory.entries.end()) {
         std::cout << "Directory '" << dirName << "' does not exist in the current directory." << std::endl;
