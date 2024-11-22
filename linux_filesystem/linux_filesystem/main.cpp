@@ -45,7 +45,7 @@ int main() {
     std::string command;
     std::cout << "SimDisk System Initialized. Type EXIT to quit." << std::endl;
     while (true) {
-        std::cout << "simdisk> ";
+        cmdHandler.updatePrompt(); // 显示当前路径的提示符
         std::getline(std::cin, command);
         if (command == "EXIT") {
             break;

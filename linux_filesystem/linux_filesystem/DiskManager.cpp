@@ -49,8 +49,12 @@ void DiskManager::initialize() {
     bitmapSize = (totalBlocks + 7) / 8;
 
     // inodeStartAddress 应该是超级块大小加上位图大小
+    //superBlock.inodeStartAddress = static_cast<uint32_t>(superBlockSize + bitmapSize);
     superBlock.inodeStartAddress = static_cast<uint32_t>(superBlockSize + bitmapSize);
     std::cout << "[DEBUG] inodeStartAddress: " << superBlock.inodeStartAddress << std::endl;
+
+    // 计算数据块的起始地址
+    superBlock.dataBlockStartAddress = superBlock.inodeStartAddress + MAX_INODES * INODE_SIZE;
 
     // 初始化位图（所有块空闲）
     bitmap.assign(bitmapSize, 0);
@@ -86,6 +90,8 @@ void DiskManager::initialize() {
 
     // 创建空的根目录并写入磁盘
     Directory rootDirectory;
+    rootDirectory.entries["."] = rootInodeIndex;
+    rootDirectory.entries[".."] = rootInodeIndex; // 根目录的父目录是自己
     std::vector<char> buffer;
     rootDirectory.serialize(buffer, blockSize);
     writeBlock(rootBlockIndex, buffer.data());
@@ -102,9 +108,8 @@ void DiskManager::readBlock(size_t blockIndex, char* buffer) {
     std::ifstream file(diskFile, std::ios::binary);
     if (!file) return;
 
-    // 计算正确的文件偏移，跳过SuperBlock和位图
-    //std::streampos offset = sizeof(SuperBlock) + bitmapSize + blockIndex * blockSize;
-    std::streampos offset = superBlock.inodeStartAddress + superBlock.inodeCount * INODE_SIZE + blockIndex * blockSize;
+    // 使用固定的数据块起始地址
+    std::streampos offset = superBlock.dataBlockStartAddress + blockIndex * blockSize;
     file.seekg(offset);
     file.read(buffer, blockSize);
     file.close();
@@ -117,9 +122,8 @@ void DiskManager::writeBlock(size_t blockIndex, const char* data) {
     std::fstream file(diskFile, std::ios::binary | std::ios::in | std::ios::out);
     if (!file) return;
 
-    // 计算正确的文件偏移，跳过SuperBlock和位图
-    //std::streampos offset = sizeof(SuperBlock) + bitmapSize + blockIndex * blockSize;
-    std::streampos offset = superBlock.inodeStartAddress + superBlock.inodeCount * INODE_SIZE + blockIndex * blockSize;
+    // 使用固定的数据块起始地址
+    std::streampos offset = superBlock.dataBlockStartAddress + blockIndex * blockSize;
     file.seekp(offset);
     file.write(data, blockSize);
     file.close();
@@ -136,9 +140,8 @@ size_t DiskManager::allocateBlock() {
             updateBitmap(); // 更新磁盘中的位图
 
             // 更新超级块中的空闲块数量
-            //SuperBlock superBlock = loadSuperBlock();
-           // superBlock.freeBlocks -= 1;
-           // updateSuperBlock(superBlock);
+            superBlock.freeBlocks--;
+            updateSuperBlock(superBlock);
 
             return i;
         }

@@ -14,11 +14,8 @@ void Directory::addEntry(const std::string& name, uint32_t inodeIndex, DiskManag
     std::vector<char> buffer;
     serialize(buffer, diskManager.blockSize);
 
-    // 获取该目录的 inode
-    INode dirInode = diskManager.readINode(this->inodeIndex);
-
-    // 将序列化数据写入该目录的块
-    diskManager.writeBlock(dirInode.blockIndex, buffer.data());
+    // 将序列化数据写入磁盘
+    diskManager.writeBlock(inodeIndex, buffer.data());
 }
 
 
@@ -42,63 +39,35 @@ uint32_t Directory::findEntry(const std::string& name) {
 }
 
 void Directory::serialize(std::vector<char>& buffer, size_t blockSize) const {
-    size_t requiredSize = sizeof(uint32_t) + sizeof(uint32_t); // parentInodeIndex + entryCount
-
-    for (const auto& entry : entries) {
-        uint32_t nameLength = static_cast<uint32_t>(entry.first.length());
-        requiredSize += sizeof(uint32_t); // nameLength
-        requiredSize += nameLength;       // name
-        requiredSize += sizeof(uint32_t); // inodeIndex
-    }
-
-    if (requiredSize > blockSize) {
-        throw std::runtime_error("Directory entries exceed block size");
-    }
-
     buffer.clear();
-    buffer.resize(blockSize, 0); // 确保缓冲区大小为 blockSize
+    buffer.reserve(blockSize);
 
     size_t offset = 0;
 
-    // 序列化 parentInodeIndex
-    std::memcpy(buffer.data() + offset, &parentInodeIndex, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
-
     // 序列化 entries 的数量
     uint32_t entryCount = static_cast<uint32_t>(entries.size());
-    std::memcpy(buffer.data() + offset, &entryCount, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
+    buffer.insert(buffer.end(), reinterpret_cast<const char*>(&entryCount), reinterpret_cast<const char*>(&entryCount) + sizeof(uint32_t));
 
     // 序列化每个目录项
     for (const auto& entry : entries) {
         const std::string& name = entry.first;
         uint32_t inodeIndex = entry.second;
 
+        // 序列化名称长度和名称
         uint32_t nameLength = static_cast<uint32_t>(name.length());
-
-        // 检查是否会超出块大小
-        if (offset + sizeof(uint32_t) + nameLength + sizeof(uint32_t) > blockSize) {
-            throw std::runtime_error("Directory serialization exceeds block size");
-        }
-
-        // 序列化名称长度
-        std::memcpy(buffer.data() + offset, &nameLength, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
-
-        // 序列化名称
-        std::memcpy(buffer.data() + offset, name.data(), nameLength);
-        offset += nameLength;
+        buffer.insert(buffer.end(), reinterpret_cast<const char*>(&nameLength), reinterpret_cast<const char*>(&nameLength) + sizeof(uint32_t));
+        buffer.insert(buffer.end(), name.begin(), name.end());
 
         // 序列化 inodeIndex
-        std::memcpy(buffer.data() + offset, &inodeIndex, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
+        buffer.insert(buffer.end(), reinterpret_cast<const char*>(&inodeIndex), reinterpret_cast<const char*>(&inodeIndex) + sizeof(uint32_t));
     }
 
-    // 调试输出
-    std::cout << "[DEBUG] Directory::serialize: inodeIndex=" << inodeIndex
-        << ", parentInodeIndex=" << parentInodeIndex
-        << ", entryCount=" << entries.size() << std::endl;
+    // 填充到块大小
+    if (buffer.size() < blockSize) {
+        buffer.resize(blockSize, 0);
+    }
 }
+
 
 
 
@@ -107,39 +76,25 @@ void Directory::deserialize(const char* data, size_t size) {
     entries.clear();
 
     // 检查数据大小
-    if (size < sizeof(uint32_t) * 2) {
+    if (size < sizeof(uint32_t)) {
         throw std::runtime_error("Insufficient data for deserialization");
     }
-
-    // 反序列化 parentInodeIndex
-    std::memcpy(&parentInodeIndex, data + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
 
     // 反序列化 entries 的数量
     uint32_t entryCount = 0;
     std::memcpy(&entryCount, data + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 
-    // 调试输出
-    std::cout << "[DEBUG] Directory::deserialize: parentInodeIndex=" << parentInodeIndex
-        << ", entryCount=" << entryCount << std::endl;
-
     // 反序列化每个目录项
     for (uint32_t i = 0; i < entryCount; ++i) {
-        // 检查剩余数据是否足够读取名称长度
-        if (offset + sizeof(uint32_t) > size) {
-            throw std::runtime_error("Corrupted directory data (name length)");
-        }
+        if (offset + sizeof(uint32_t) > size) throw std::runtime_error("Corrupted directory data");
 
         // 反序列化名称长度
         uint32_t nameLength = 0;
         std::memcpy(&nameLength, data + offset, sizeof(uint32_t));
         offset += sizeof(uint32_t);
 
-        // 检查剩余数据是否足够读取名称和 inodeIndex
-        if (offset + nameLength + sizeof(uint32_t) > size) {
-            throw std::runtime_error("Corrupted directory data (name and inodeIndex)");
-        }
+        if (offset + nameLength + sizeof(uint32_t) > size) throw std::runtime_error("Corrupted directory data");
 
         // 反序列化名称
         std::string name(data + offset, nameLength);
@@ -152,11 +107,4 @@ void Directory::deserialize(const char* data, size_t size) {
 
         entries[name] = inodeIndex;
     }
-}
-
-size_t Directory::getMaxEntries(size_t blockSize) const
-{
-    const size_t AVERAGE_NAME_LENGTH = 16; // 根据您的需求设置平均名称长度
-    return (blockSize - sizeof(uint32_t) * 2) / (sizeof(uint32_t) * 2 + AVERAGE_NAME_LENGTH);
-
 }

@@ -11,6 +11,7 @@
 
 constexpr size_t SUPERBLOCK_SIZE = sizeof(uint32_t) * 5; // SuperBlock 的固定大小
 constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t); // 应为22字节
+constexpr uint32_t MAX_INODES = 1024; // 根据需要设置
 
 
 class DiskManager {

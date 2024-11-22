@@ -9,12 +9,12 @@
 #include "SuperBlock.h"  
 #include "INode.h"       // 包含 INode.h
 
-
 class CommandHandler {
 public:
     DiskManager& diskManager; // 磁盘管理器
     Directory currentDirectory; // 当前目录对象
     uint32_t currentInodeIndex; // 当前目录的 inodeIndex
+    std::string currentPath;    // 当前路径
 
     // 构造函数
     CommandHandler(DiskManager& dm);
@@ -37,14 +37,11 @@ public:
     // 工具方法：解析路径
     std::vector<std::string> parsePath(const std::string& path);
 
-    // 显示目录内容
+    void updatePrompt();
+
     void displayDirectoryContents(const Directory& dir, uint32_t dirInodeIndex, bool recursive, const std::string& indent);
 
-    // 新增：根据路径查找目录
-    bool findDirectory(const std::vector<std::string>& pathComponents, uint32_t& resultInodeIndex, Directory& resultDirectory);
-
-    // 新增：获取指定 inodeIndex 的目录
-    bool getDirectory(uint32_t inodeIndex, Directory& directory);
+    Directory loadDirectoryFromINode(const INode& inode);
 };
 
 #endif // COMMANDHANDLER_H

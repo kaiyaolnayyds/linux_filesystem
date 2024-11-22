@@ -67,4 +67,3 @@ void SuperBlock::deserialize(const char* buffer)
     std::memcpy(&inodeStartAddress, buffer + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 }
-
