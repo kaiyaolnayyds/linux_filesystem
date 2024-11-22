@@ -43,6 +43,7 @@ void CommandHandler::handleCommand(const std::string& command) {
     else if (cmd == "cd") {
         std::string path;
         iss >> path;
+        path;
         handleCd(path);
     }
     else if (cmd == "dir") {
@@ -121,6 +122,7 @@ void CommandHandler::handleCd(const std::string& path) {
 
     // 解析路径
     std::vector<std::string> components = parsePath(path);
+    components;
     uint32_t inodeIndex;
     Directory dir;
     INode inode;
@@ -140,13 +142,14 @@ void CommandHandler::handleCd(const std::string& path) {
 
     // 遍历路径组件
     for (const auto& component : components) {
+        component;
         if (component == "..") {
             // 返回上一级目录
             if (inodeIndex == diskManager.superBlock.rootInode) {
                 // 已经是根目录，无法再向上
-                continue; // 或者您可以输出提示信息
+                continue; 
             }
-
+            // 获取父目录的 inode
             auto it = dir.entries.find("..");
             if (it == dir.entries.end()) {
                 std::cout << "Cannot move to parent directory." << std::endl;
@@ -157,6 +160,8 @@ void CommandHandler::handleCd(const std::string& path) {
             INode parentInode = diskManager.readINode(parentInodeIndex);
             dir = loadDirectoryFromINode(parentInode);
             inodeIndex = parentInodeIndex;
+          
+            
         }
         else if (component == ".") {
             // 当前目录，跳过
@@ -187,7 +192,7 @@ void CommandHandler::handleCd(const std::string& path) {
     // 更新当前目录和 inode 索引
     currentDirectory = dir;
     currentInodeIndex = inodeIndex;
-
+    
     // 更新 currentPath
     if (path[0] == '/') {
         // 绝对路径
@@ -201,7 +206,7 @@ void CommandHandler::handleCd(const std::string& path) {
     }
 
     // 规范化 currentPath，处理 `.` 和 `..`
-    std::vector<std::string> pathComponents = parsePath(currentPath);
+    std::vector<std::string> pathComponents = parsePath_normal(currentPath);
     currentPath.clear();
     for (const auto& comp : pathComponents) {
         currentPath += "/";
@@ -217,8 +222,44 @@ void CommandHandler::handleCd(const std::string& path) {
 }
 
 
+std::vector<std::string> CommandHandler::parsePath(const std::string& path) {
+    path;
+    std::vector<std::string> components;
+    if (path.empty()) {
+        return components;
+    }
 
+    std::istringstream stream(path);
+    std::string token;
+    while (std::getline(stream, token, '/')) {
+        components.push_back(token);
+    }
+    return components;
+}
 
+std::vector<std::string> CommandHandler::parsePath_normal(const std::string& path) {
+    std::vector<std::string> components;
+    if (path.empty()) {
+        return components;
+    }
+
+    std::istringstream stream(path);
+    std::string token;
+    while (std::getline(stream, token, '/')) {
+        if (token == "." || token.empty()) {
+            continue; // 忽略当前目录符号和空字符串
+        }
+        else if (token == "..") {
+            if (!components.empty()) {
+                components.pop_back(); // 返回上一级目录
+            }
+        }
+        else {
+            components.push_back(token);
+        }
+    }
+    return components;
+}
 
 
 void CommandHandler::handleDir(const std::string& path, bool recursive) {
@@ -488,33 +529,7 @@ void CommandHandler::handleCheck() {
     std::cout << "Checking and restoring file system." << std::endl;
 }
 
-// CommandHandler.cpp
 
-// CommandHandler.cpp
-
-std::vector<std::string> CommandHandler::parsePath(const std::string& path) {
-    std::vector<std::string> components;
-    if (path.empty()) {
-        return components;
-    }
-
-    std::istringstream stream(path);
-    std::string token;
-    while (std::getline(stream, token, '/')) {
-        if (token == "." || token.empty()) {
-            continue; // 忽略当前目录符号和空字符串
-        }
-        else if (token == "..") {
-            if (!components.empty()) {
-                components.pop_back(); // 返回上一级目录
-            }
-        }
-        else {
-            components.push_back(token);
-        }
-    }
-    return components;
-}
 
 void CommandHandler::updatePrompt() {
     std::cout << "simdisk:" << (currentPath.empty() ? "/" : currentPath) << "> ";

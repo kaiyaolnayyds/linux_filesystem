@@ -96,7 +96,14 @@ public:
      * @param path 要解析的路径字符串。
      * @return 包含路径各部分的字符串列表。
      */
-    std::vector<std::string> parsePath(const std::string& path);
+    std::vector<std::string> parsePath(const std::string& path);        //路径解析函数，用于去掉path中的"/",从而使其便于处理
+
+    /**
+   * @brief 解析路径字符串，分解为路径组件列表。
+   * @param path 要解析的路径字符串。
+   * @return 包含路径各部分的字符串列表。
+   */
+    std::vector<std::string> parsePath_normal(const std::string& path);      //路径构造函数，用于最后对path进行规范化处理，去除path中的"."和".."
 
     /**
      * @brief 更新命令提示符以反映当前路径。
