@@ -142,7 +142,6 @@ void CommandHandler::handleCd(const std::string& path) {
 
     // 遍历路径组件
     for (const auto& component : components) {
-        component;
         if (component == "..") {
             // 返回上一级目录
             if (inodeIndex == diskManager.superBlock.rootInode) {
@@ -193,6 +192,10 @@ void CommandHandler::handleCd(const std::string& path) {
     currentDirectory = dir;
     currentInodeIndex = inodeIndex;
     
+    //从路径解析到这里可以单独封装为一个函数，功能为切换到指定目录下
+
+
+
     // 更新 currentPath
     if (path[0] == '/') {
         // 绝对路径
@@ -423,6 +426,11 @@ void CommandHandler::handleMd(const std::string& dirName) {
     std::vector<char> buffer;
     newDirectory.serialize(buffer, diskManager.blockSize);
     diskManager.writeBlock(newInode.blockIndex, buffer.data());
+
+    /*
+    （待开发）这里实现切换到要创建目录的目录下，路径解析类似cd,最终拿到currentDirectory和currentInodeIndex
+    */
+
 
     // 更新当前目录的 entries
     currentDirectory.addEntry(dirName, newInodeIndex);
