@@ -35,7 +35,7 @@ int main() {
 
         // 加载超级块和位图
         diskManager.loadSuperBlock();
-        diskManager.loadBitmap();
+        diskManager.loadBitmaps();
         std::cout << "File system loaded from existing disk file." << std::endl;
     }
 

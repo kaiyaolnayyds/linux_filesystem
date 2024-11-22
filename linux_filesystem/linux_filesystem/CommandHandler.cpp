@@ -298,6 +298,38 @@ Directory CommandHandler::loadDirectoryFromINode(const INode& inode) {
     return dir;
 }
 
+bool CommandHandler::deleteDirectoryRecursively(uint32_t inodeIndex) {
+    INode inode = diskManager.readINode(inodeIndex);
+
+    if (inode.type == 1) {
+        // 如果是目录，递归删除其内容
+        Directory dir = loadDirectoryFromINode(inode);
+
+        for (const auto& entry : dir.entries) {
+            const std::string& name = entry.first;
+            uint32_t childInodeIndex = entry.second;
+
+            // 跳过 "." 和 ".."
+            if (name == "." || name == "..") {
+                continue;
+            }
+
+            // 递归删除子文件或子目录
+            if (!deleteDirectoryRecursively(childInodeIndex)) {
+                return false;
+            }
+        }
+    }
+
+    // 释放数据块
+    diskManager.freeBlock(inode.blockIndex);
+
+    // 释放 inode
+    diskManager.freeINode(inodeIndex);
+
+    return true;
+}
+
 
 
 void CommandHandler::handleMd(const std::string& dirName) {
@@ -308,9 +340,11 @@ void CommandHandler::handleMd(const std::string& dirName) {
     }
 
     // 分配一个新的 inode
-    uint32_t newInodeIndex = diskManager.superBlock.inodeCount++;
-    // 更新超级块并写回磁盘
-    diskManager.updateSuperBlock(diskManager.superBlock);
+    uint32_t newInodeIndex = diskManager.allocateINode();
+    if (newInodeIndex == static_cast<uint32_t>(-1)) {
+        std::cout << "Failed to allocate inode for new directory." << std::endl;
+        return;
+    }
 
     INode newInode;
     newInode.size = 0;
@@ -322,6 +356,8 @@ void CommandHandler::handleMd(const std::string& dirName) {
     size_t newBlockIndex = diskManager.allocateBlock();
     if (newBlockIndex == static_cast<size_t>(-1)) {
         std::cout << "Failed to allocate block for new directory." << std::endl;
+        // 释放已分配的 inode
+        diskManager.freeINode(newInodeIndex);
         return;
     }
     newInode.blockIndex = static_cast<uint32_t>(newBlockIndex);
@@ -335,8 +371,8 @@ void CommandHandler::handleMd(const std::string& dirName) {
 
     // 创建新目录的目录项
     Directory newDirectory;
-    newDirectory.entries["."] = newInodeIndex; // 当前目录
-    newDirectory.entries[".."] = currentInodeIndex; // 父目录
+    newDirectory.addEntry(".", newInodeIndex);       // 当前目录
+    newDirectory.addEntry("..", currentInodeIndex);  // 父目录
 
     // 序列化并写入磁盘
     std::vector<char> buffer;
@@ -344,9 +380,9 @@ void CommandHandler::handleMd(const std::string& dirName) {
     diskManager.writeBlock(newInode.blockIndex, buffer.data());
 
     // 更新当前目录的 entries
-    currentDirectory.entries[dirName] = newInodeIndex;
+    currentDirectory.addEntry(dirName, newInodeIndex);
 
-    // **将更新后的当前目录写回磁盘**
+    // 将更新后的当前目录写回磁盘
     // 获取当前目录的 inode
     INode currentDirInode = diskManager.readINode(currentInodeIndex);
 
@@ -359,8 +395,10 @@ void CommandHandler::handleMd(const std::string& dirName) {
     diskManager.writeINode(currentInodeIndex, currentDirInode);
 
     // 调试输出新目录的 inode 信息
-    std::cout << "[DEBUG] New directory INode: size=" << newInode.size << ", mode=" << newInode.mode
-        << ", type=" << static_cast<int>(newInode.type) << ", blockIndex=" << newInode.blockIndex
+    std::cout << "[DEBUG] New directory INode: size=" << newInode.size
+        << ", mode=" << newInode.mode
+        << ", type=" << static_cast<int>(newInode.type)
+        << ", blockIndex=" << newInode.blockIndex
         << ", inodeIndex=" << newInode.inodeIndex << std::endl;
 
     std::cout << "Directory '" << dirName << "' created at block " << newBlockIndex << "." << std::endl;
@@ -370,9 +408,61 @@ void CommandHandler::handleMd(const std::string& dirName) {
 
 
 void CommandHandler::handleRd(const std::string& dirName) {
-    // 逻辑：删除目录及其内容
-    std::cout << "Removing directory: " << dirName << std::endl;
+    // 首先，在当前目录中查找要删除的目录的 inode 索引
+    auto it = currentDirectory.entries.find(dirName);
+    if (it == currentDirectory.entries.end()) {
+        std::cout << "Directory '" << dirName << "' does not exist in the current directory." << std::endl;
+        return;
+    }
+
+    uint32_t dirInodeIndex = it->second;
+    INode dirInode = diskManager.readINode(dirInodeIndex);
+
+    // 检查要删除的是否是目录
+    if (dirInode.type != 1) {
+        std::cout << "'" << dirName << "' is not a directory." << std::endl;
+        return;
+    }
+
+    // 加载要删除的目录
+    Directory dirToDelete = loadDirectoryFromINode(dirInode);
+
+    // 如果目录不为空，提示用户是否继续删除
+    if (dirToDelete.entries.size() > 2) { // 除了 "." 和 ".." 之外还有其他条目
+        std::cout << "Directory '" << dirName << "' is not empty. Do you want to delete it? (y/n): ";
+        std::string choice;
+        std::getline(std::cin, choice);
+        if (choice != "y" && choice != "Y") {
+            std::cout << "Deletion cancelled." << std::endl;
+            return;
+        }
+    }
+
+    // 递归删除目录内容
+    bool success = deleteDirectoryRecursively(dirInodeIndex);
+    if (success) {
+        // 从当前目录中删除该目录的目录项
+        currentDirectory.entries.erase(dirName);
+
+        // 将更新后的当前目录写回磁盘
+        // 获取当前目录的 inode
+        INode currentDirInode = diskManager.readINode(currentInodeIndex);
+
+        // 序列化当前目录并写入磁盘
+        std::vector<char> buffer;
+        currentDirectory.serialize(buffer, diskManager.blockSize);
+        diskManager.writeBlock(currentDirInode.blockIndex, buffer.data());
+
+        // 将当前目录的 inode 写回磁盘（如果需要更新 size 等信息）
+        diskManager.writeINode(currentInodeIndex, currentDirInode);
+
+        std::cout << "Directory '" << dirName << "' deleted successfully." << std::endl;
+    }
+    else {
+        std::cout << "Failed to delete directory '" << dirName << "'." << std::endl;
+    }
 }
+
 
 void CommandHandler::handleNewFile(const std::string& fileName) {
     // 逻辑：创建新文件

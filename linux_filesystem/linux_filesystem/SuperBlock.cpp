@@ -38,6 +38,8 @@ void SuperBlock::updateInodeCount(int change) {
     inodeCount += change;
 }
 
+// SuperBlock.cpp
+
 void SuperBlock::serialize(char* buffer) const
 {
     size_t offset = 0;
@@ -50,6 +52,9 @@ void SuperBlock::serialize(char* buffer) const
     std::memcpy(buffer + offset, &rootInode, sizeof(uint32_t));
     offset += sizeof(uint32_t);
     std::memcpy(buffer + offset, &inodeStartAddress, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    // **加入 dataBlockStartAddress 的序列化**
+    std::memcpy(buffer + offset, &dataBlockStartAddress, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 }
 
@@ -65,5 +70,8 @@ void SuperBlock::deserialize(const char* buffer)
     std::memcpy(&rootInode, buffer + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
     std::memcpy(&inodeStartAddress, buffer + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    // **加入 dataBlockStartAddress 的反序列化**
+    std::memcpy(&dataBlockStartAddress, buffer + offset, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 }

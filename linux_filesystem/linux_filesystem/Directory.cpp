@@ -4,18 +4,25 @@
 #include "DiskManager.h"
 
 
-void Directory::addEntry(const std::string& name, uint32_t inodeIndex, DiskManager& diskManager) {
+//void Directory::addEntry(const std::string& name, uint32_t inodeIndex, DiskManager& diskManager) {
+//    if (entries.find(name) != entries.end()) {
+//        throw std::runtime_error("Entry already exists: " + name);
+//    }
+//    entries[name] = inodeIndex;
+//
+//    // 序列化 Directory 对象
+//    std::vector<char> buffer;
+//    serialize(buffer, diskManager.blockSize);
+//
+//    // 将序列化数据写入磁盘
+//    diskManager.writeBlock(inodeIndex, buffer.data());
+//}
+
+void Directory::addEntry(const std::string& name, uint32_t inodeIndex) {
     if (entries.find(name) != entries.end()) {
         throw std::runtime_error("Entry already exists: " + name);
     }
     entries[name] = inodeIndex;
-
-    // 序列化 Directory 对象
-    std::vector<char> buffer;
-    serialize(buffer, diskManager.blockSize);
-
-    // 将序列化数据写入磁盘
-    diskManager.writeBlock(inodeIndex, buffer.data());
 }
 
 

@@ -42,6 +42,9 @@ public:
     void displayDirectoryContents(const Directory& dir, uint32_t dirInodeIndex, bool recursive, const std::string& indent);
 
     Directory loadDirectoryFromINode(const INode& inode);
+
+    bool deleteDirectoryRecursively(uint32_t inodeIndex);
+
 };
 
 #endif // COMMANDHANDLER_H
