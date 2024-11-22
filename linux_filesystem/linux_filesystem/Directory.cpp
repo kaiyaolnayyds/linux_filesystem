@@ -46,34 +46,34 @@ uint32_t Directory::findEntry(const std::string& name) {
 }
 
 void Directory::serialize(std::vector<char>& buffer, size_t blockSize) const {
-    buffer.clear();
-    buffer.reserve(blockSize);
-
-    size_t offset = 0;
+    buffer.resize(blockSize, 0); // 直接分配块大小的缓冲区
+    char* ptr = buffer.data();
 
     // 序列化 entries 的数量
     uint32_t entryCount = static_cast<uint32_t>(entries.size());
-    buffer.insert(buffer.end(), reinterpret_cast<const char*>(&entryCount), reinterpret_cast<const char*>(&entryCount) + sizeof(uint32_t));
+    std::memcpy(ptr, &entryCount, sizeof(entryCount));
+    ptr += sizeof(entryCount);
 
     // 序列化每个目录项
     for (const auto& entry : entries) {
         const std::string& name = entry.first;
         uint32_t inodeIndex = entry.second;
 
-        // 序列化名称长度和名称
+        // 序列化名称长度
         uint32_t nameLength = static_cast<uint32_t>(name.length());
-        buffer.insert(buffer.end(), reinterpret_cast<const char*>(&nameLength), reinterpret_cast<const char*>(&nameLength) + sizeof(uint32_t));
-        buffer.insert(buffer.end(), name.begin(), name.end());
+        std::memcpy(ptr, &nameLength, sizeof(nameLength));
+        ptr += sizeof(nameLength);
+
+        // 序列化名称
+        std::memcpy(ptr, name.data(), nameLength);
+        ptr += nameLength;
 
         // 序列化 inodeIndex
-        buffer.insert(buffer.end(), reinterpret_cast<const char*>(&inodeIndex), reinterpret_cast<const char*>(&inodeIndex) + sizeof(uint32_t));
-    }
-
-    // 填充到块大小
-    if (buffer.size() < blockSize) {
-        buffer.resize(blockSize, 0);
+        std::memcpy(ptr, &inodeIndex, sizeof(inodeIndex));
+        ptr += sizeof(inodeIndex);
     }
 }
+
 
 
 
@@ -89,8 +89,8 @@ void Directory::deserialize(const char* data, size_t size) {
 
     // 反序列化 entries 的数量
     uint32_t entryCount = 0;
-    std::memcpy(&entryCount, data + offset, sizeof(uint32_t));
-    offset += sizeof(uint32_t);
+    std::memcpy(&entryCount, data + offset, sizeof(entryCount));
+    offset += sizeof(entryCount);
 
     // 反序列化每个目录项
     for (uint32_t i = 0; i < entryCount; ++i) {
@@ -98,10 +98,13 @@ void Directory::deserialize(const char* data, size_t size) {
 
         // 反序列化名称长度
         uint32_t nameLength = 0;
-        std::memcpy(&nameLength, data + offset, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
+        std::memcpy(&nameLength, data + offset, sizeof(nameLength));
+        offset += sizeof(nameLength);
 
-        if (offset + nameLength + sizeof(uint32_t) > size) throw std::runtime_error("Corrupted directory data");
+        // 检查名称长度是否合法
+        if (nameLength > 255 || offset + nameLength + sizeof(uint32_t) > size) {
+            throw std::runtime_error("Invalid or corrupted directory data");
+        }
 
         // 反序列化名称
         std::string name(data + offset, nameLength);
@@ -109,8 +112,8 @@ void Directory::deserialize(const char* data, size_t size) {
 
         // 反序列化 inodeIndex
         uint32_t inodeIndex = 0;
-        std::memcpy(&inodeIndex, data + offset, sizeof(uint32_t));
-        offset += sizeof(uint32_t);
+        std::memcpy(&inodeIndex, data + offset, sizeof(inodeIndex));
+        offset += sizeof(inodeIndex);
 
         entries[name] = inodeIndex;
     }

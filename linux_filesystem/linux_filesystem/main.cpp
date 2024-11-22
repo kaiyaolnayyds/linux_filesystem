@@ -4,6 +4,7 @@
 #include <fstream>
 
 int main() {
+    //创建磁盘对象
     DiskManager diskManager("simdisk.bin", 512, 100);
 
     // 检查磁盘文件是否存在
@@ -18,8 +19,10 @@ int main() {
 
         // **检查磁盘文件大小是否足够**
         diskFileCheck.seekg(0, std::ios::end);
-        size_t fileSize = diskFileCheck.tellg();
-        size_t expectedSize = diskManager.totalBlocks * diskManager.blockSize;
+        size_t fileSize = diskFileCheck.tellg();         //.bin磁盘文件大小
+        size_t expectedSize = diskManager.totalBlocks * diskManager.blockSize;             //预期大小为块总数*块大小
+
+        //磁盘文件大小充足
         if (fileSize < expectedSize) {
             diskFileCheck.close();
 
@@ -29,6 +32,7 @@ int main() {
             file.write("", 1);
             file.close();
         }
+        //磁盘文件大小不足
         else {
             diskFileCheck.close();
         }

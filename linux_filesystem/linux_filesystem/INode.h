@@ -1,4 +1,8 @@
 // include/INode.h
+/*
+Inode实现
+作为结构体存储文件信息，通过Inode访问到数据块，并由Inode实现权限控制等操作
+*/
 #ifndef INODE_H
 #define INODE_H
 

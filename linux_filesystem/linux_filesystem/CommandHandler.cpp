@@ -406,7 +406,6 @@ void CommandHandler::handleMd(const std::string& dirName) {
 
 
 
-
 void CommandHandler::handleRd(const std::string& dirName) {
     // 首先，在当前目录中查找要删除的目录的 inode 索引
     auto it = currentDirectory.entries.find(dirName);

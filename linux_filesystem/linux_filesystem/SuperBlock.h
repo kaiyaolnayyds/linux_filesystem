@@ -1,23 +1,24 @@
 // include/SuperBlock.h
+/*
+superblock实现
+主要记录block与Inode的总量，未使用/已使用的inode/block数量
+
+*/
+
+
 #ifndef SUPERBLOCK_H
 #define SUPERBLOCK_H
-
 #include <cstdint>
 #include <string>
 #include <cstring>
 
-
-
-
 class SuperBlock {
 public:
-    uint32_t totalBlocks;
-    uint32_t freeBlocks;
-    uint32_t inodeCount;
-    uint32_t rootInode;
-
+    uint32_t totalBlocks;       //块总数
+    uint32_t freeBlocks;        //剩余块数
+    uint32_t inodeCount;        //Inode数
+    uint32_t rootInode;          //初始Inode数
     uint32_t inodeStartAddress;  // inode 区域在磁盘上的起始地址
-
     uint32_t dataBlockStartAddress; // 数据块区域在磁盘上的起始地址
 
     // 构造函数

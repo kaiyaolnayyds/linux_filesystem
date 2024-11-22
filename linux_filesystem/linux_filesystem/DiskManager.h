@@ -11,12 +11,12 @@
 #include "INode.h"
 
 constexpr size_t SUPERBLOCK_SIZE = sizeof(uint32_t) * 6; // SuperBlock 的固定大小
-constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t); // 应为22字节
-constexpr uint32_t MAX_INODES = 1024; // 根据需要设置
+constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t); // Inode大小，应为22字节
+constexpr uint32_t MAX_INODES = 1024; // 最大Inode数，根据需要设置
 
 class DiskManager {
 public:
-    std::string diskFile;
+    std::string diskFile;                // 磁盘文件名
     std::vector<uint8_t> bitmap;         // 数据块位图
     size_t bitmapSize;                   // 数据块位图大小（字节数）
     std::vector<uint8_t> inodeBitmap;    // inode 位图
@@ -27,10 +27,13 @@ public:
 
     DiskManager(const std::string& diskFile, size_t blockSize, size_t totalBlocks);
 
+    //磁盘对象初始化方法
     void initialize();
 
+    //读取数据块
     void readBlock(size_t blockIndex, char* buffer);
 
+    //写入数据块
     void writeBlock(size_t blockIndex, const char* data);
 
     // 分配空闲块，返回块索引

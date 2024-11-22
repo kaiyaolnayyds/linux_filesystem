@@ -63,7 +63,7 @@ void DiskManager::initialize() {
     superBlock.inodeStartAddress = static_cast<uint32_t>(superBlockSize + inodeBitmapSize + bitmapSize);
     std::cout << "[DEBUG] inodeStartAddress: " << superBlock.inodeStartAddress << std::endl;
 
-    // 计算数据块的起始地址
+    // 计算数据块的起始地址，数据块存在Inode区后
     superBlock.dataBlockStartAddress = superBlock.inodeStartAddress + MAX_INODES * INODE_SIZE;
 
     // 将超级块写入磁盘
@@ -73,7 +73,7 @@ void DiskManager::initialize() {
     updateBitmaps();
 
     // 为根目录的数据分配一个块
-    size_t rootBlockIndex = allocateBlock(); // 这将更新位图
+    size_t rootBlockIndex = allocateBlock(); // 更新位图
     if (rootBlockIndex == static_cast<size_t>(-1)) {
         std::cerr << "Error: Unable to allocate block for root directory." << std::endl;
         return;
@@ -104,13 +104,12 @@ void DiskManager::initialize() {
 
     // 创建空的根目录并写入磁盘
     Directory rootDirectory;
-    rootDirectory.entries["."] = rootInodeIndex;
+    rootDirectory.entries["."] = rootInodeIndex;  // 根目录当前目录
     rootDirectory.entries[".."] = rootInodeIndex; // 根目录的父目录是自己
     std::vector<char> buffer;
     rootDirectory.serialize(buffer, blockSize);
     writeBlock(rootBlockIndex, buffer.data());
 
-    // 不需要关闭文件，因为我们在函数开头已经关闭了
 }
 
 void DiskManager::writeBlock(size_t blockIndex, const char* data) {
@@ -119,7 +118,7 @@ void DiskManager::writeBlock(size_t blockIndex, const char* data) {
     std::fstream file(diskFile, std::ios::binary | std::ios::in | std::ios::out);
     if (!file) return;
 
-    // 使用固定的数据块起始地址
+    // 数据块偏移量，使用固定的数据块起始地址，从数据块起始位置往后数到已经使用掉的数据块位置
     std::streampos offset = superBlock.dataBlockStartAddress + blockIndex * blockSize;
     file.seekp(offset);
     file.write(data, blockSize);
@@ -132,7 +131,7 @@ void DiskManager::readBlock(size_t blockIndex, char* buffer) {
     std::ifstream file(diskFile, std::ios::binary);
     if (!file) return;
 
-    // 使用固定的数据块起始地址
+    // 数据块偏移量，使用固定的数据块起始地址，从数据块起始位置往后数到已经使用掉的数据块位置
     std::streampos offset = superBlock.dataBlockStartAddress + blockIndex * blockSize;
     file.seekg(offset);
     file.read(buffer, blockSize);
