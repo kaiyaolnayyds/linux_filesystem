@@ -780,9 +780,54 @@ void CommandHandler::handleCopy(const std::string& src, const std::string& dest)
 }
 
 void CommandHandler::handleDel(const std::string& fileName) {
-    // 逻辑：删除文件
-    std::cout << "Deleting file: " << fileName << std::endl;
+    if (fileName.empty()) {
+        std::cout << "File name is empty." << std::endl;
+        return;
+    }
+
+    // 1. 检查文件是否存在于当前目录
+    auto it = currentDirectory.entries.find(fileName);
+    if (it == currentDirectory.entries.end()) {
+        std::cout << "File '" << fileName << "' does not exist in the current directory." << std::endl;
+        return;
+    }
+
+    uint32_t fileInodeIndex = it->second;
+    INode fileInode = diskManager.readINode(fileInodeIndex);
+
+    // 2. 检查是否是普通文件
+    if (fileInode.type != 0) {
+        std::cout << "'" << fileName << "' is not a regular file and cannot be deleted using 'del' command." << std::endl;
+        return;
+    }
+
+    // 3. 释放文件占用的资源
+    // 释放数据块
+    if (fileInode.blockIndex != 0) {
+        diskManager.freeBlock(fileInode.blockIndex);
+        diskManager.superBlock.freeBlocks++;
+    }
+
+    // 释放 inode
+    diskManager.freeINode(fileInodeIndex);
+    diskManager.superBlock.inodeCount--;
+
+    // 4. 从当前目录的 entries 中删除文件
+    currentDirectory.entries.erase(it);
+
+    // 5. 将更新后的当前目录写回磁盘
+    INode currentDirInode = diskManager.readINode(currentInodeIndex);
+    std::vector<char> buffer;
+    currentDirectory.serialize(buffer, diskManager.blockSize);
+    diskManager.writeBlock(currentDirInode.blockIndex, buffer.data());
+    diskManager.writeINode(currentInodeIndex, currentDirInode);
+
+    // 6. 更新超级块
+    diskManager.updateSuperBlock(diskManager.superBlock);
+
+    std::cout << "File '" << fileName << "' deleted successfully from current directory." << std::endl;
 }
+
 
 void CommandHandler::handleCheck() {
     // 逻辑：检测并恢复文件系统
