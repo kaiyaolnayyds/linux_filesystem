@@ -882,6 +882,11 @@ void CommandHandler::handleDel(const std::string& fileName) {
         std::cout << "'" << fileName << "' is not a regular file and cannot be deleted using 'del' command." << std::endl;
         return;
     }
+    // 3. 检查对当前文件的写权限
+    if (!checkPermission(fileInode, 'w')) {
+        std::cout << "Permission denied: Cannot delete file." << std::endl;
+        return;
+    }
 
     // 3. 释放文件占用的资源
     // 释放数据块
