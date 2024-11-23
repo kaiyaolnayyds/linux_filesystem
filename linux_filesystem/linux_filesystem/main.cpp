@@ -5,7 +5,7 @@
 
 int main() {
     //创建磁盘对象
-    DiskManager diskManager("simdisk.bin", 512, 100);
+    DiskManager diskManager("simdisk.bin", 1024, 100);
 
     // 检查磁盘文件是否存在
     std::ifstream diskFileCheck("simdisk.bin", std::ios::binary);

@@ -21,8 +21,8 @@ public:
     std::string currentPath;        ///< 当前所在的路径（字符串表示）
 
     // 用于跟踪使用的 inode 和数据块
-    std::unordered_set<uint32_t> usedInodes;
-    std::unordered_set<uint32_t> usedBlocks;
+    std::unordered_set<uint32_t> usedInodes;  //已使用inodes
+    std::unordered_set<uint32_t> usedBlocks;  //已使用数据块
 
     /**
      * @brief 构造函数，初始化 CommandHandler 对象。

@@ -46,7 +46,7 @@ void DiskManager::initialize() {
     file.close();
 
     // 初始化超级块
-    superBlock = SuperBlock(static_cast<uint32_t>(totalBlocks), static_cast<uint32_t>(totalBlocks), 0, 0);
+    superBlock = SuperBlock(static_cast<uint32_t>(totalBlocks), static_cast<uint32_t>(totalBlocks), 0, 0,0);
 
     // 计算超级块和位图的大小
     size_t superBlockSize = SUPERBLOCK_SIZE; // 使用固定大小
@@ -244,6 +244,16 @@ void DiskManager::updateSuperBlock(const SuperBlock& sb) {
     file.close();
 
     superBlock = sb; // 更新成员变量
+}
+
+void DiskManager::updateSuperBlockUsage()
+{
+    // 重新计算空闲块数
+    superBlock.freeBlocks = calculateFreeBlocks();
+    // 重新计算已分配的 inode 数量
+    superBlock.inodeCount = calculateAllocatedInodes();
+    // 更新超级块到磁盘
+    updateSuperBlock(superBlock);
 }
 
 SuperBlock DiskManager::loadSuperBlock() {

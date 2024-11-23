@@ -10,7 +10,7 @@
 #include "SuperBlock.h"
 #include "INode.h"
 
-constexpr size_t SUPERBLOCK_SIZE = sizeof(uint32_t) * 6; // SuperBlock 的固定大小
+
 constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t); // Inode大小，应为22字节
 constexpr uint32_t MAX_INODES = 1024; // 最大Inode数，根据需要设置
 
@@ -65,6 +65,9 @@ public:
 
     // 更新超级块
     void updateSuperBlock(const SuperBlock& superBlock);
+
+    //重新计算并更新超级块中的 freeBlocks 和 inodeCount
+    void updateSuperBlockUsage();
 
     // 加载超级块
     SuperBlock loadSuperBlock();

@@ -109,15 +109,48 @@ void CommandHandler::handleCommand(const std::string& command) {
 }
 
 void CommandHandler::handleInfo() {
-    SuperBlock superBlock = diskManager.loadSuperBlock();
+    std::cout << "File System Information:" << std::endl;
 
-    // 打印超级块信息
-    std::cout << "=== File System Information ===" << std::endl;
-    std::cout << "Total Blocks: " << superBlock.totalBlocks << std::endl;
-    std::cout << "Free Blocks: " << superBlock.freeBlocks << std::endl;
-    std::cout << "Total iNodes: " << superBlock.inodeCount << std::endl;
-    std::cout << "Root Directory iNode: " << superBlock.rootInode << std::endl;
-    std::cout << "================================" << std::endl;
+    // 在获取超级块信息之前，更新使用情况
+    diskManager.updateSuperBlockUsage();
+    // 获取超级块信息
+    const SuperBlock& sb = diskManager.superBlock;
+
+    // 获取总块数和空闲块数
+    uint32_t totalBlocks = sb.totalBlocks;
+    uint32_t freeBlocks = sb.freeBlocks;
+    uint32_t usedBlocks = totalBlocks - freeBlocks;
+
+    // 获取块大小
+    size_t blockSize = diskManager.blockSize;
+
+    // 计算总容量、已使用空间和可用空间（以字节为单位）
+    uint64_t totalSize = static_cast<uint64_t>(totalBlocks) * blockSize;
+    uint64_t usedSize = static_cast<uint64_t>(usedBlocks) * blockSize;
+    uint64_t freeSize = static_cast<uint64_t>(freeBlocks) * blockSize;
+
+    // 获取已分配的 inode 数量
+    uint32_t allocatedInodes = sb.inodeCount;
+    uint32_t freeInodes = MAX_INODES - allocatedInodes;
+
+    // 显示信息
+    std::cout << "----------------------------------------" << std::endl;
+    std::cout << "Block Size       : " << blockSize << " bytes" << std::endl;
+    std::cout << "Total Blocks     : " << totalBlocks << std::endl;
+    std::cout << "Used Blocks      : " << usedBlocks << std::endl;
+    std::cout << "Free Blocks      : " << freeBlocks << std::endl;
+    std::cout << "Total Size       : " << totalSize << " bytes" << std::endl;
+    std::cout << "Used Size        : " << usedSize << " bytes" << std::endl;
+    std::cout << "Free Size        : " << freeSize << " bytes" << std::endl;
+    std::cout << "----------------------------------------" << std::endl;
+    std::cout << "Total Inodes     : " << MAX_INODES << std::endl;
+    std::cout << "Allocated Inodes : " << allocatedInodes << std::endl;
+    std::cout << "Free Inodes      : " << freeInodes << std::endl;
+    std::cout << "----------------------------------------" << std::endl;
+    std::cout << "Root Inode Index : " << sb.rootInode << std::endl;
+    std::cout << "INode Start Addr : " << sb.inodeStartAddress << std::endl;
+    std::cout << "Data Block Start : " << sb.dataBlockStartAddress << std::endl;
+    std::cout << "----------------------------------------" << std::endl;
 }
 
 
@@ -844,6 +877,11 @@ void CommandHandler::handleCheck() {
     // 3. 检查并修复 inode 位图
     bool inodeBitmapChanged = false;
     for (uint32_t i = 0; i < MAX_INODES; ++i) {
+        // **跳过根目录的 inode**
+        if (i == diskManager.superBlock.rootInode) {
+            continue;
+        }
+
         bool isAllocatedInBitmap = diskManager.isINodeAllocated(i);
         bool isUsed = (usedInodes.find(i) != usedInodes.end());
 
@@ -864,6 +902,11 @@ void CommandHandler::handleCheck() {
     // 4. 检查并修复数据块位图
     bool blockBitmapChanged = false;
     for (size_t i = 0; i < diskManager.totalBlocks; ++i) {
+        // **跳过根目录的数据块**
+        if (i == diskManager.superBlock.rootDataBlock) { //  rootDataBlock 表示根目录的数据块索引
+            continue;
+        }
+
         bool isAllocatedInBitmap = diskManager.isBlockAllocated(i);
         bool isUsed = (usedBlocks.find(i) != usedBlocks.end());
 
@@ -896,6 +939,7 @@ void CommandHandler::handleCheck() {
 
 
 
+
 void CommandHandler::updatePrompt() {
     std::cout << "simdisk:" << (currentPath.empty() ? "/" : currentPath) << "> ";
 }
@@ -913,6 +957,10 @@ void CommandHandler::traverseFileSystem(uint32_t inodeIndex) {
     // 记录 inode 使用的数据块
     if (inode.blockIndex != 0) {
         usedBlocks.insert(inode.blockIndex);
+        // **如果这是根目录的 inode，记录其数据块索引**
+        if (inodeIndex == diskManager.superBlock.rootInode) {
+            diskManager.superBlock.rootDataBlock = inode.blockIndex; // 保存根目录的数据块索引
+        }
     }
 
     if (inode.type == 1) { // 目录类型

@@ -12,18 +12,21 @@ superblock实现
 #include <string>
 #include <cstring>
 
+constexpr size_t SUPERBLOCK_SIZE = sizeof(uint32_t) * 7; // SuperBlock 的固定大小,应为28字节
+
 class SuperBlock {
 public:
     uint32_t totalBlocks;       //块总数
     uint32_t freeBlocks;        //剩余块数
     uint32_t inodeCount;        //Inode数
-    uint32_t rootInode;          //初始Inode数
+    uint32_t rootInode;          //起始Inode索引
+    uint32_t rootDataBlock;      //起始数据块索引
     uint32_t inodeStartAddress;  // inode 区域在磁盘上的起始地址
     uint32_t dataBlockStartAddress; // 数据块区域在磁盘上的起始地址
 
     // 构造函数
     SuperBlock();
-    SuperBlock(uint32_t totalBlocks, uint32_t freeBlocks, uint32_t inodeCount, uint32_t rootInode);
+    SuperBlock(uint32_t totalBlocks, uint32_t freeBlocks, uint32_t inodeCount, uint32_t rootInode, uint32_t rootDataBlock);
 
     // 将超级块数据保存到文件
     void saveToFile(const std::string& diskFile);
