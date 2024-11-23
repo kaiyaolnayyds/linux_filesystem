@@ -4,7 +4,8 @@
 #include <sstream>
 
 
-CommandHandler::CommandHandler(DiskManager& dm) : diskManager(dm) {
+CommandHandler::CommandHandler(DiskManager& diskManager, UserManager& userManager)
+    : diskManager(diskManager), userManager(userManager) {
     // 加载超级块
     SuperBlock superBlock = diskManager.loadSuperBlock();
     uint32_t rootInodeIndex = superBlock.rootInode;
@@ -32,12 +33,17 @@ CommandHandler::CommandHandler(DiskManager& dm) : diskManager(dm) {
 
 
 
-void CommandHandler::handleCommand(const std::string& command) {
+bool CommandHandler::handleCommand(const std::string& command) {
     std::istringstream iss(command);
     std::string cmd;
     iss >> cmd;
 
-    if (cmd == "info") {
+    if (cmd == "logout") {
+        userManager.logout();
+        std::cout << "Logged out." << std::endl;
+        return true; // 返回 true，表示需要注销
+    }
+    else if (cmd == "info") {
         handleInfo();
     }
     else if (cmd == "cd") {
@@ -106,6 +112,7 @@ void CommandHandler::handleCommand(const std::string& command) {
     else {
         std::cout << "Unknown command: " << cmd << std::endl;
     }
+    return false; //未注销，返回false
 }
 
 void CommandHandler::handleInfo() {
@@ -941,8 +948,14 @@ void CommandHandler::handleCheck() {
 
 
 void CommandHandler::updatePrompt() {
-    std::cout << "simdisk:" << (currentPath.empty() ? "/" : currentPath) << "> ";
+    std::string username = userManager.getCurrentUsername();
+    if (username.empty()) {
+        username = "guest";
+    }
+
+    std::cout << username << "@" << "simdisk:" << currentPath << "> ";
 }
+
 
 void CommandHandler::traverseFileSystem(uint32_t inodeIndex) {
     // 防止循环引用
@@ -979,4 +992,42 @@ void CommandHandler::traverseFileSystem(uint32_t inodeIndex) {
         }
     }
     // 如果需要处理多块文件，可以在此添加代码
+}
+
+bool CommandHandler::checkPermission(const INode& inode, char permissionType) {
+    if (!userManager.isLoggedIn()) {
+        std::cout << "No user logged in. Please login first." << std::endl;
+        return false;
+    }
+
+    int currentUID = userManager.getCurrentUID();
+
+    uint16_t permissions = inode.mode;
+
+    uint16_t userPerms = (permissions >> 6) & 0x7;  // 所有者权限
+    uint16_t otherPerms = permissions & 0x7;        // 其他用户权限
+
+    uint16_t requiredPerm = 0;
+    switch (permissionType) {
+    case 'r':
+        requiredPerm = 0x4; // 读取权限
+        break;
+    case 'w':
+        requiredPerm = 0x2; // 写入权限
+        break;
+    case 'x':
+        requiredPerm = 0x1; // 执行权限
+        break;
+    default:
+        return false;
+    }
+
+    if (inode.ownerUID == currentUID) {
+        // 检查所有者权限
+        return (userPerms & requiredPerm) != 0;
+    }
+    else {
+        // 检查其他用户权限
+        return (otherPerms & requiredPerm) != 0;
+    }
 }

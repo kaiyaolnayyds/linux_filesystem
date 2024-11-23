@@ -1,10 +1,11 @@
 #include "DiskManager.h"
 #include "CommandHandler.h"
+#include "UserManager.h" 
 #include <iostream>
 #include <fstream>
 
 int main() {
-    //创建磁盘对象
+    // 创建磁盘对象
     DiskManager diskManager("simdisk.bin", 1024, 100);
 
     // 检查磁盘文件是否存在
@@ -17,22 +18,20 @@ int main() {
     else {
         std::cout << "[DEBUG] Disk file exists. Loading existing file system." << std::endl;
 
-        // **检查磁盘文件大小是否足够**
+        // 检查磁盘文件大小是否足够
         diskFileCheck.seekg(0, std::ios::end);
-        size_t fileSize = diskFileCheck.tellg();         //.bin磁盘文件大小
-        size_t expectedSize = diskManager.totalBlocks * diskManager.blockSize;             //预期大小为块总数*块大小
+        size_t fileSize = diskFileCheck.tellg(); // .bin 磁盘文件大小
+        size_t expectedSize = diskManager.totalBlocks * diskManager.blockSize; // 预期大小为块总数 * 块大小
 
-        //磁盘文件大小充足
         if (fileSize < expectedSize) {
             diskFileCheck.close();
 
-            // **预分配磁盘文件大小**
+            // 预分配磁盘文件大小
             std::ofstream file(diskManager.diskFile, std::ios::binary | std::ios::out | std::ios::in);
             file.seekp(expectedSize - 1);
             file.write("", 1);
             file.close();
         }
-        //磁盘文件大小不足
         else {
             diskFileCheck.close();
         }
@@ -43,20 +42,47 @@ int main() {
         std::cout << "File system loaded from existing disk file." << std::endl;
     }
 
-    CommandHandler cmdHandler(diskManager);
+    UserManager userManager; // 创建 UserManager 对象
+    CommandHandler cmdHandler(diskManager, userManager); // 将 userManager 传递给 CommandHandler
 
-    // 主循环处理命令
-    std::string command;
-    std::cout << "SimDisk System Initialized. Type EXIT to quit." << std::endl;
+    // 主循环
     while (true) {
-        cmdHandler.updatePrompt(); // 显示当前路径的提示符
-        std::getline(std::cin, command);
-        if (command == "EXIT") {
-            break;
+        // 登录循环
+        while (!userManager.isLoggedIn()) {
+            std::string username, password;
+
+            std::cout << "SimDisk Login\nUsername: ";
+            std::getline(std::cin, username);
+            std::cout << "Password: ";
+            std::getline(std::cin, password);
+
+            if (userManager.login(username, password)) {
+                std::cout << "Login successful. Welcome, " << username << "!" << std::endl;
+            }
+            else {
+                std::cout << "Login failed. Invalid username or password." << std::endl;
+            }
         }
-        cmdHandler.handleCommand(command);
+
+        // 处理用户命令
+        std::string command;
+        while (userManager.isLoggedIn()) {
+            cmdHandler.updatePrompt(); // 显示当前路径的提示符
+            std::getline(std::cin, command);
+            if (command == "EXIT") {
+                std::cout << "EXIT successful. Welcom to next use" << std::endl;
+                return 0; // 退出程序
+            }
+
+            bool shouldLogout = cmdHandler.handleCommand(command);
+
+            if (shouldLogout) {
+                // 用户已注销，跳出命令循环，返回登录循环
+                std::cout << "Logout successful." << std::endl;
+                break;
+            }
+        }
     }
 
     return 0;
 }
-

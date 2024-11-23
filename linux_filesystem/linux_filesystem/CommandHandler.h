@@ -7,7 +7,8 @@
 #include <unordered_set>
 #include "Directory.h"
 #include "SuperBlock.h"
-#include "INode.h" // 包含 INode.h 文件，用于处理 inode 相关操作
+#include "INode.h" 
+#include "UserManager.h"
 
 /**
  * @class CommandHandler
@@ -16,6 +17,7 @@
 class CommandHandler {
 public:
     DiskManager& diskManager;        ///< 磁盘管理器对象的引用，用于管理磁盘操作
+    UserManager& userManager;        //<用户管理对象的引用，用于管理用户操作
     Directory currentDirectory;     ///< 当前所在的目录对象
     uint32_t currentInodeIndex;     ///< 当前目录对应的 inode 索引
     std::string currentPath;        ///< 当前所在的路径（字符串表示）
@@ -28,13 +30,13 @@ public:
      * @brief 构造函数，初始化 CommandHandler 对象。
      * @param dm 磁盘管理器对象的引用。
      */
-    CommandHandler(DiskManager& dm);
+    CommandHandler(DiskManager& diskManager, UserManager& userManager);
 
     /**
      * @brief 处理输入的命令并调用对应的处理函数。
      * @param command 用户输入的命令字符串。
      */
-    void handleCommand(const std::string& command);
+    bool handleCommand(const std::string& command);
 
     /**
      * @brief 显示文件系统的整体信息。
@@ -161,6 +163,14 @@ public:
        * 该函数会收集所有正在使用的 inode 和数据块信息。
        */
     void traverseFileSystem(uint32_t inodeIndex);
+
+    /**
+    * @brief 检查当前用户是否有对指定 inode 进行指定操作的权限。
+    * @param inode 要检查的 inode。
+    * @param permissionType 操作类型，"r"：读取，"w"：写入，"x"：执行。
+    * @return 有权限返回 true，无权限返回 false。
+    */
+    bool checkPermission(const INode& inode, char permissionType);
 };
 
 #endif // COMMANDHANDLER_H

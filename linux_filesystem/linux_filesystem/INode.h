@@ -23,6 +23,7 @@ public:
     uint16_t mode;                 // 保护码（权限）
     uint32_t type;                  // 文件类型（0: 文件, 1: 目录）
     uint32_t permissions;           // 权限
+    int ownerUID;                // 所有者的 UID，新增
     std::vector<uint32_t> blocks;   // 数据块存储空间
 
     // 其他需要的元数据，例如时间戳等

@@ -11,7 +11,7 @@
 #include "INode.h"
 
 
-constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t); // Inode大小，应为22字节
+constexpr size_t INODE_SIZE = sizeof(uint32_t) * 5 + sizeof(uint16_t)+sizeof(int); // Inode大小
 constexpr uint32_t MAX_INODES = 1024; // 最大Inode数，根据需要设置
 
 class DiskManager {

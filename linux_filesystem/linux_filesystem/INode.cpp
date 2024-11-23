@@ -2,7 +2,7 @@
 #include "INode.h"
 
 INode::INode(uint32_t size, uint32_t type, uint32_t permissions)
-    : size(size), type(type), permissions(permissions) {
+    : size(size), type(type), permissions(permissions), ownerUID(-1) {
     blocks.resize(12, 0); // 初始化数据块指针数组，假设最多12个块
 }
 
@@ -31,10 +31,12 @@ void INode::serialize(char* buffer) const {
     offset += sizeof(uint32_t);
     std::memcpy(buffer + offset, &mode, sizeof(uint16_t));
     offset += sizeof(uint16_t);
-    std::memcpy(buffer + offset, &type, sizeof(uint32_t)); // 现在作为uint32_t序列化
+    std::memcpy(buffer + offset, &type, sizeof(uint32_t)); 
     offset += sizeof(uint32_t);
-    std::memcpy(buffer + offset, &permissions, sizeof(uint32_t)); // 包含permissions
+    std::memcpy(buffer + offset, &permissions, sizeof(uint32_t)); 
     offset += sizeof(uint32_t);
+    std::memcpy(buffer + offset, &ownerUID, sizeof(int)); 
+    offset += sizeof(int);
     // 如果需要，序列化其他成员
 }
 
@@ -48,9 +50,11 @@ void INode::deserialize(const char* buffer) {
     offset += sizeof(uint32_t);
     std::memcpy(&mode, buffer + offset, sizeof(uint16_t));
     offset += sizeof(uint16_t);
-    std::memcpy(&type, buffer + offset, sizeof(uint32_t)); // 现在作为uint32_t反序列化
+    std::memcpy(&type, buffer + offset, sizeof(uint32_t)); 
     offset += sizeof(uint32_t);
-    std::memcpy(&permissions, buffer + offset, sizeof(uint32_t)); // 包含permissions
+    std::memcpy(&permissions, buffer + offset, sizeof(uint32_t)); 
     offset += sizeof(uint32_t);
+    std::memcpy(&ownerUID, buffer + offset, sizeof(int));
+    offset += sizeof(int);
     // 如果需要，反序列化其他成员
 }
