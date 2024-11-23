@@ -132,6 +132,16 @@ public:
      * @return 删除是否成功。
      */
     bool deleteDirectoryRecursively(uint32_t inodeIndex);
+
+    /**
+ * @brief 根据给定的路径，导航到目标目录，返回对应的 inode 索引和目录对象。
+ * @param path 要导航的路径，可以是绝对路径或相对路径。
+ * @param resultInodeIndex 输出参数，返回目标目录的 inode 索引。
+ * @param resultDirectory 输出参数，返回目标目录的 Directory 对象。
+ * @return 成功返回 true，失败返回 false。
+ */
+    bool navigateToPath(const std::string& path, uint32_t& resultInodeIndex, Directory& resultDirectory);
+
 };
 
 #endif // COMMANDHANDLER_H
