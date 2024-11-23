@@ -68,6 +68,14 @@ public:
     void handleNewFile(const std::string& fileName);
 
     /**
+ * @brief 写入文件内容。
+ * @param filePath 要写入的文件路径。
+ * @param append 是否以追加模式写入，默认为 false（覆盖写入）。
+ */
+    void handleWriteFile(const std::string& filePath, bool append = false);
+
+
+    /**
      * @brief 显示文件内容。
      * @param fileName 要显示内容的文件名称。
      */

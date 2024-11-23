@@ -78,6 +78,13 @@ void CommandHandler::handleCommand(const std::string& command) {
         iss >> fileName;
         handleNewFile(fileName);
     }
+    else if (cmd == "writefile") {
+        std::string filePath;
+        std::string mode;
+        iss >> filePath >> mode;
+        bool append = (mode == "append");
+        handleWriteFile(filePath, append);
+    }
     else if (cmd == "cat") {
         std::string fileName;
         iss >> fileName;
@@ -577,11 +584,195 @@ void CommandHandler::handleNewFile(const std::string& fileName) {
     std::cout << "File '" << fileName << "' created successfully in current directory." << std::endl;
 }
 
+void CommandHandler::handleWriteFile(const std::string& fileName, bool append) {
+    if (fileName.empty()) {
+        std::cout << "File name is empty." << std::endl;
+        return;
+    }
 
-void CommandHandler::handleCat(const std::string& fileName) {
-    // 逻辑：显示文件内容
-    std::cout << "Displaying file: " << fileName << std::endl;
+    // 1. 检查文件是否存在于当前目录
+    bool fileExists = false;
+    uint32_t fileInodeIndex;
+    INode fileInode;
+
+    auto it = currentDirectory.entries.find(fileName);
+    if (it != currentDirectory.entries.end()) {
+        // 文件存在
+        fileExists = true;
+        fileInodeIndex = it->second;
+        fileInode = diskManager.readINode(fileInodeIndex);
+
+        // 检查是否是普通文件
+        if (fileInode.type != 0) {
+            std::cout << "'" << fileName << "' is not a regular file." << std::endl;
+            return;
+        }
+    }
+    else {
+        // 文件不存在，在当前目录下创建新文件
+        // 分配新的 inode
+        fileInodeIndex = diskManager.allocateINode();
+        if (fileInodeIndex == static_cast<uint32_t>(-1)) {
+            std::cout << "Failed to allocate inode for new file." << std::endl;
+            return;
+        }
+
+        // 初始化新文件的 inode
+        fileInode.size = 0;             // 文件大小为 0
+        fileInode.mode = 0644;          // 默认权限，可根据需要调整
+        fileInode.type = 0;             // 文件类型，0 表示普通文件
+        fileInode.inodeIndex = fileInodeIndex;
+        fileInode.blockIndex = 0;       // 还未分配数据块
+
+        // 在当前目录中添加新文件的目录项
+        currentDirectory.addEntry(fileName, fileInodeIndex);
+
+        // 将更新后的当前目录写回磁盘
+        INode currentDirInode = diskManager.readINode(currentInodeIndex);
+        std::vector<char> buffer;
+        currentDirectory.serialize(buffer, diskManager.blockSize);
+        diskManager.writeBlock(currentDirInode.blockIndex, buffer.data());
+        diskManager.writeINode(currentInodeIndex, currentDirInode);
+    }
+
+    // 2. 获取用户输入的文件内容
+    std::cout << "Enter content for the file (end with a single '.' on a new line):" << std::endl;
+    std::string line;
+    std::string fileContent;
+    while (std::getline(std::cin, line)) {
+        if (line == ".") {
+            break;
+        }
+        fileContent += line + "\n";
+    }
+
+    // 如果是追加模式，读取原有内容并追加,append有点Bug，后面再维护
+    if (append && fileExists && fileInode.size > 0) {
+        // 读取原有内容
+        char* buffer = new char[fileInode.size];
+        diskManager.readBlock(fileInode.blockIndex, buffer);
+        std::string originalContent(buffer, fileInode.size);
+        delete[] buffer;
+
+        // 追加新内容
+        fileContent = originalContent + fileContent;
+    }
+
+    // 更新文件大小
+    fileInode.size = static_cast<uint32_t>(fileContent.size());
+
+    // 3. 分配或重新分配数据块
+    // 假设文件内容可以放入一个数据块中
+    if (fileInode.blockIndex == 0) {
+        // 文件还未分配数据块，分配新的数据块
+        size_t newBlockIndex = diskManager.allocateBlock();
+        if (newBlockIndex == static_cast<size_t>(-1)) {
+            std::cout << "Failed to allocate block for file." << std::endl;
+            // 释放已分配的 inode（如果是新创建的文件）
+            if (!fileExists) {
+                diskManager.freeINode(fileInodeIndex);
+                currentDirectory.entries.erase(fileName);
+            }
+            return;
+        }
+        fileInode.blockIndex = static_cast<uint32_t>(newBlockIndex);
+        diskManager.superBlock.freeBlocks--;
+        diskManager.updateSuperBlock(diskManager.superBlock);
+    }
+    else {
+        // 文件已有数据块，在本实现中直接覆盖
+        // 如果需要支持文件内容超过一个数据块的情况，需要实现多块管理
+    }
+
+    // 4. 将文件内容写入数据块
+    char* buffer = new char[diskManager.blockSize];
+    std::memset(buffer, 0, diskManager.blockSize);
+    std::memcpy(buffer, fileContent.data(), fileInode.size);
+    diskManager.writeBlock(fileInode.blockIndex, buffer);
+    delete[] buffer;
+
+    // 更新文件的 inode 并写回磁盘
+    diskManager.writeINode(fileInodeIndex, fileInode);
+
+    std::cout << "Content written to '" << fileName << "' successfully." << std::endl;
 }
+
+
+
+
+void CommandHandler::handleCat(const std::string& filePath) {
+    if (filePath.empty()) {
+        std::cout << "File path is empty." << std::endl;
+        return;
+    }
+
+    // 1. 解析路径，定位到文件所在的目录
+    std::string parentPath;
+    std::string fileName;
+    size_t lastSlash = filePath.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        // 存在斜杠，拆分父路径和文件名
+        parentPath = filePath.substr(0, lastSlash);
+        fileName = filePath.substr(lastSlash + 1);
+
+        // 处理类似 "/filename" 的情况，父路径为空字符串，应设为根目录
+        if (parentPath.empty()) {
+            parentPath = "/";
+        }
+    }
+    else {
+        // 不存在斜杠，表示在当前目录下
+        parentPath = ".";
+        fileName = filePath;
+    }
+
+    // 2. 使用 navigateToPath 导航到文件所在的目录
+    uint32_t parentInodeIndex;
+    Directory parentDirectory;
+    if (!navigateToPath(parentPath, parentInodeIndex, parentDirectory)) {
+        // 导航失败，已在 navigateToPath 中输出错误信息
+        return;
+    }
+
+    // 3. 检查文件是否存在
+    auto it = parentDirectory.entries.find(fileName);
+    if (it == parentDirectory.entries.end()) {
+        std::cout << "File '" << fileName << "' does not exist in the specified path." << std::endl;
+        return;
+    }
+
+    uint32_t fileInodeIndex = it->second;
+    INode fileInode = diskManager.readINode(fileInodeIndex);
+
+    // 4. 检查是否是文件类型
+    if (fileInode.type != 0) {
+        std::cout << "'" << fileName << "' is not a regular file." << std::endl;
+        return;
+    }
+
+    // 5. 读取文件内容
+    if (fileInode.size == 0) {
+        std::cout << "File '" << fileName << "' is empty." << std::endl;
+        return;
+    }
+
+    // 假设文件内容存储在直接数据块中（单块文件）
+    if (fileInode.blockIndex == 0) {
+        std::cout << "File '" << fileName << "' has no data block allocated." << std::endl;
+        return;
+    }
+
+    char* buffer = new char[diskManager.blockSize];
+    diskManager.readBlock(fileInode.blockIndex, buffer);
+
+    // 6. 输出文件内容
+    std::cout << "=== Content of '" << fileName << "' ===" << std::endl;
+    std::cout.write(buffer, fileInode.size);
+    std::cout << "\n=============================" << std::endl;
+
+    delete[] buffer;
+}
+
 
 void CommandHandler::handleCopy(const std::string& src, const std::string& dest) {
     // 逻辑：拷贝文件
