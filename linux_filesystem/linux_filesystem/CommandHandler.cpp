@@ -219,6 +219,22 @@ std::vector<std::string> CommandHandler::parsePath(const std::string& path) {
     return components;
 }
 
+void CommandHandler::parsePath(const std::string& fullPath, std::string& parentPath, std::string& fileName) {
+    size_t lastSlash = fullPath.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        parentPath = fullPath.substr(0, lastSlash);
+        fileName = fullPath.substr(lastSlash + 1);
+
+        if (parentPath.empty()) {
+            parentPath = "/";
+        }
+    }
+    else {
+        parentPath = ".";
+        fileName = fullPath;
+    }
+}
+
 std::vector<std::string> CommandHandler::parsePath_normal(const std::string& path) {
     std::vector<std::string> components;
     if (path.empty()) {
@@ -856,10 +872,52 @@ void CommandHandler::handleCat(const std::string& filePath) {
 
 
 
-void CommandHandler::handleCopy(const std::string& src, const std::string& dest) {
-    // 逻辑：拷贝文件
-    std::cout << "Copying from " << src << " to " << dest << std::endl;
+void CommandHandler::handleCopy(const std::string& srcPath, const std::string& destPath) {
+    if (srcPath.empty() || destPath.empty()) {
+        std::cout << "Source or destination path is empty." << std::endl;
+        return;
+    }
+
+    bool srcIsHost = false;
+    bool destIsHost = false;
+
+    std::string src = srcPath;
+    std::string dest = destPath;
+
+    // 检查源路径是否是主机文件系统
+    if (srcPath.substr(0, 6) == "<host>") {
+        srcIsHost = true;
+        src = srcPath.substr(6); // 去掉 <host> 前缀
+    }
+
+    // 检查目标路径是否是主机文件系统
+    if (destPath.substr(0, 6) == "<host>") {
+        destIsHost = true;
+        dest = destPath.substr(6); // 去掉 <host> 前缀
+    }
+
+    if (srcIsHost && destIsHost) {
+        std::cout << "Copying between host file system paths is not supported." << std::endl;
+        return;
+    }
+
+    if (!srcIsHost && !destIsHost) {
+        // 模拟文件系统内部复制
+        copyWithinSimDisk(src, dest);
+    }
+    else if (srcIsHost && !destIsHost) {
+        // 从主机文件系统复制到模拟文件系统
+        copyFromHostToSimDisk(src, dest);
+    }
+    else if (!srcIsHost && destIsHost) {
+        // 从模拟文件系统复制到主机文件系统
+        copyFromSimDiskToHost(src, dest);
+    }
+    else {
+        std::cout << "Invalid copy operation." << std::endl;
+    }
 }
+
 
 void CommandHandler::handleDel(const std::string& fileName) {
     if (fileName.empty()) {
@@ -1084,3 +1142,162 @@ bool CommandHandler::checkPermission(const INode& inode, char permissionType) {
     }
 }
 
+
+
+void CommandHandler::copyWithinSimDisk(const std::string& srcPath, const std::string& destPath) {
+    // 1. 获取源文件的 inode
+    uint32_t srcInodeIndex;
+    INode srcInode;
+    if (!getFileINode(srcPath, srcInodeIndex, srcInode)) {
+        std::cout << "Source file '" << srcPath << "' does not exist." << std::endl;
+        return;
+    }
+
+    // 检查读取权限
+    if (!checkPermission(srcInode, 'r')) {
+        std::cout << "Permission denied: Cannot read source file '" << srcPath << "'." << std::endl;
+        return;
+    }
+
+    // 2. 读取源文件内容
+    if (srcInode.size == 0) {
+        std::cout << "Source file '" << srcPath << "' is empty." << std::endl;
+    }
+
+    if (srcInode.blockIndex == 0) {
+        std::cout << "Source file '" << srcPath << "' has no data block allocated." << std::endl;
+        return;
+    }
+
+    char* buffer = new char[diskManager.blockSize];
+    diskManager.readBlock(srcInode.blockIndex, buffer);
+    std::string fileContent(buffer, srcInode.size);
+    delete[] buffer;
+
+    // 3. 解析目标路径，获取目标文件名和父目录
+    std::string destParentPath;
+    std::string destFileName;
+    parsePath(destPath, destParentPath, destFileName);
+
+    // 4. 导航到目标目录
+    uint32_t destParentInodeIndex;
+    Directory destParentDirectory;
+    if (!navigateToPath(destParentPath, destParentInodeIndex, destParentDirectory)) {
+        std::cout << "Destination path '" << destParentPath << "' does not exist." << std::endl;
+        return;
+    }
+
+    // 检查对目标目录的写权限
+    INode destParentInode = diskManager.readINode(destParentInodeIndex);
+    if (!checkPermission(destParentInode, 'w')) {
+        std::cout << "Permission denied: Cannot write to destination directory '" << destParentPath << "'." << std::endl;
+        return;
+    }
+
+    // 5. 创建或覆盖目标文件
+    uint32_t destInodeIndex;
+    INode destInode;
+    bool destFileExists = destParentDirectory.entries.find(destFileName) != destParentDirectory.entries.end();
+
+    if (destFileExists) {
+        // 目标文件已存在，读取其 inode
+        destInodeIndex = destParentDirectory.entries[destFileName];
+        destInode = diskManager.readINode(destInodeIndex);
+
+        // 检查写入权限
+        if (!checkPermission(destInode, 'w')) {
+            std::cout << "Permission denied: Cannot overwrite destination file '" << destFileName << "'." << std::endl;
+            return;
+        }
+    }
+    else {
+        // 创建新文件
+        destInodeIndex = diskManager.allocateINode();
+        if (destInodeIndex == static_cast<uint32_t>(-1)) {
+            std::cout << "Failed to allocate inode for destination file." << std::endl;
+            return;
+        }
+
+        destInode.size = 0;
+        destInode.type = 0; // 普通文件
+        destInode.inodeIndex = destInodeIndex;
+        destInode.blockIndex = 0;
+        destInode.ownerUID = userManager.getCurrentUID();
+
+        // 设置权限
+        destInode.mode = userManager.isAdmin() ? 0644 : 0664;
+
+        // 添加到目标目录
+        destParentDirectory.addEntry(destFileName, destInodeIndex);
+
+        // 保存更新的目录
+        std::vector<char> buffer;
+        destParentDirectory.serialize(buffer, diskManager.blockSize);
+        diskManager.writeBlock(destParentInode.blockIndex, buffer.data());
+        diskManager.writeINode(destParentInodeIndex, destParentInode);
+    }
+
+    // 6. 写入内容到目标文件
+    // 分配数据块
+    if (destInode.blockIndex == 0) {
+        size_t newBlockIndex = diskManager.allocateBlock();
+        if (newBlockIndex == static_cast<size_t>(-1)) {
+            std::cout << "Failed to allocate block for destination file." << std::endl;
+            // 如果是新创建的文件，需要清理
+            if (!destFileExists) {
+                diskManager.freeINode(destInodeIndex);
+                destParentDirectory.entries.erase(destFileName);
+            }
+            return;
+        }
+        destInode.blockIndex = static_cast<uint32_t>(newBlockIndex);
+        diskManager.superBlock.freeBlocks--;
+        diskManager.updateSuperBlock(diskManager.superBlock);
+    }
+
+    destInode.size = static_cast<uint32_t>(fileContent.size());
+
+    char* destBuffer = new char[diskManager.blockSize];
+    std::memset(destBuffer, 0, diskManager.blockSize);
+    std::memcpy(destBuffer, fileContent.data(), destInode.size);
+    diskManager.writeBlock(destInode.blockIndex, destBuffer);
+    delete[] destBuffer;
+
+    // 保存目标文件的 inode
+    diskManager.writeINode(destInodeIndex, destInode);
+
+    std::cout << "Copied '" << srcPath << "' to '" << destPath << "' successfully within SimDisk." << std::endl;
+}
+
+void CommandHandler::copyFromHostToSimDisk(const std::string& hostPath, const std::string& simDiskPath)
+{
+}
+
+void CommandHandler::copyFromSimDiskToHost(const std::string& simDiskPath, const std::string& hostPath)
+{
+}
+
+
+
+
+bool CommandHandler::getFileINode(const std::string& filePath, uint32_t& inodeIndex, INode& inode) {
+    uint32_t parentInodeIndex;
+    Directory parentDirectory;
+    std::string parentPath;
+    std::string fileName;
+    parsePath(filePath, parentPath, fileName);
+
+    if (!navigateToPath(parentPath, parentInodeIndex, parentDirectory)) {
+        std::cout << "Path '" << parentPath << "' does not exist." << std::endl;
+        return false;
+    }
+
+    auto it = parentDirectory.entries.find(fileName);
+    if (it == parentDirectory.entries.end()) {
+        return false;
+    }
+
+    inodeIndex = it->second;
+    inode = diskManager.readINode(inodeIndex);
+    return true;
+}

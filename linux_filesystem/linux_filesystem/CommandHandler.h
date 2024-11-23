@@ -114,6 +114,14 @@ public:
     std::vector<std::string> parsePath(const std::string& path);        //路径解析函数，用于去掉path中的"/",从而使其便于处理
 
     /**
+    * @brief 解析路径，获取父路径和文件名。
+    * @param fullPath 完整的路径。
+    * @param parentPath 输出参数，返回父路径。
+    * @param fileName 输出参数，返回文件名。
+    */
+    void parsePath(const std::string& fullPath, std::string& parentPath, std::string& fileName);
+
+    /**
    * @brief 解析路径字符串，分解为路径组件列表。
    * @param path 要解析的路径字符串。
    * @return 包含路径各部分的字符串列表。
@@ -171,6 +179,36 @@ public:
     * @return 有权限返回 true，无权限返回 false。
     */
     bool checkPermission(const INode& inode, char permissionType);
+
+    /**
+    * @brief 在模拟文件系统内部复制文件。
+    * @param srcPath 源文件的路径。
+    * @param destPath 目标文件的路径。
+    */
+    void copyWithinSimDisk(const std::string& srcPath, const std::string& destPath);
+
+    /**
+     * @brief 从主机文件系统复制文件到模拟文件系统。
+     * @param hostPath 主机文件系统中的文件路径。
+     * @param simDiskPath 模拟文件系统中的目标路径。
+     */
+    void copyFromHostToSimDisk(const std::string& hostPath, const std::string& simDiskPath);
+
+    /**
+     * @brief 从模拟文件系统复制文件到主机文件系统。
+     * @param simDiskPath 模拟文件系统中的文件路径。
+     * @param hostPath 主机文件系统中的目标路径。
+     */
+    void copyFromSimDiskToHost(const std::string& simDiskPath, const std::string& hostPath);
+
+    /**
+    * @brief 根据文件路径获取对应的 inode。
+    * @param filePath 文件的路径。
+    * @param inodeIndex 输出参数，返回 inode 的索引。
+    * @param inode 输出参数，返回 inode 对象。
+    * @return 如果成功找到文件并获取 inode，返回 true；否则返回 false。
+    */
+    bool getFileINode(const std::string& filePath, uint32_t& inodeIndex, INode& inode);
 };
 
 #endif // COMMANDHANDLER_H
