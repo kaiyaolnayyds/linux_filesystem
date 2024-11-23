@@ -830,12 +830,105 @@ void CommandHandler::handleDel(const std::string& fileName) {
 
 
 void CommandHandler::handleCheck() {
-    // 逻辑：检测并恢复文件系统
-    std::cout << "Checking and restoring file system." << std::endl;
+    std::cout << "Starting file system check..." << std::endl;
+
+    usedInodes.clear();
+    usedBlocks.clear();
+
+    // 1. 从根目录开始遍历文件系统
+    traverseFileSystem(diskManager.superBlock.rootInode);
+
+    // 2. 加载位图
+    diskManager.loadBitmaps();
+
+    // 3. 检查并修复 inode 位图
+    bool inodeBitmapChanged = false;
+    for (uint32_t i = 0; i < MAX_INODES; ++i) {
+        bool isAllocatedInBitmap = diskManager.isINodeAllocated(i);
+        bool isUsed = (usedInodes.find(i) != usedInodes.end());
+
+        if (isAllocatedInBitmap && !isUsed) {
+            // inode 标记为已分配但未使用
+            std::cout << "Inode " << i << " marked as allocated but not in use. Fixing..." << std::endl;
+            diskManager.freeINode(i);
+            inodeBitmapChanged = true;
+        }
+        else if (!isAllocatedInBitmap && isUsed) {
+            // inode 未标记为已分配但正在使用
+            std::cout << "Inode " << i << " not marked as allocated but in use. Fixing..." << std::endl;
+            diskManager.allocateINodeAtIndex(i);
+            inodeBitmapChanged = true;
+        }
+    }
+
+    // 4. 检查并修复数据块位图
+    bool blockBitmapChanged = false;
+    for (size_t i = 0; i < diskManager.totalBlocks; ++i) {
+        bool isAllocatedInBitmap = diskManager.isBlockAllocated(i);
+        bool isUsed = (usedBlocks.find(i) != usedBlocks.end());
+
+        if (isAllocatedInBitmap && !isUsed) {
+            // 数据块标记为已分配但未使用
+            std::cout << "Data block " << i << " marked as allocated but not in use. Fixing..." << std::endl;
+            diskManager.freeBlock(i);
+            blockBitmapChanged = true;
+        }
+        else if (!isAllocatedInBitmap && isUsed) {
+            // 数据块未标记为已分配但正在使用
+            std::cout << "Data block " << i << " not marked as allocated but in use. Fixing..." << std::endl;
+            diskManager.allocateBlockAtIndex(i);
+            blockBitmapChanged = true;
+        }
+    }
+
+    // 5. 如果位图有更改，更新位图到磁盘
+    if (inodeBitmapChanged || blockBitmapChanged) {
+        diskManager.updateBitmaps();
+    }
+
+    // 6. 更新超级块信息
+    diskManager.superBlock.freeBlocks = diskManager.calculateFreeBlocks();
+    diskManager.superBlock.inodeCount = diskManager.calculateAllocatedInodes();
+    diskManager.updateSuperBlock(diskManager.superBlock);
+
+    std::cout << "File system check completed." << std::endl;
 }
 
 
 
 void CommandHandler::updatePrompt() {
     std::cout << "simdisk:" << (currentPath.empty() ? "/" : currentPath) << "> ";
+}
+
+void CommandHandler::traverseFileSystem(uint32_t inodeIndex) {
+    // 防止循环引用
+    if (usedInodes.find(inodeIndex) != usedInodes.end()) {
+        return;
+    }
+
+    usedInodes.insert(inodeIndex);
+
+    INode inode = diskManager.readINode(inodeIndex);
+
+    // 记录 inode 使用的数据块
+    if (inode.blockIndex != 0) {
+        usedBlocks.insert(inode.blockIndex);
+    }
+
+    if (inode.type == 1) { // 目录类型
+        Directory dir = loadDirectoryFromINode(inode);
+
+        for (const auto& entry : dir.entries) {
+            // 跳过 "." 和 ".."
+            if (entry.first == "." || entry.first == "..") {
+                continue;
+            }
+
+            uint32_t childInodeIndex = entry.second;
+
+            // 递归遍历子 inode
+            traverseFileSystem(childInodeIndex);
+        }
+    }
+    // 如果需要处理多块文件，可以在此添加代码
 }

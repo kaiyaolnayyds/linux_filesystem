@@ -360,3 +360,40 @@ INode DiskManager::readINode(uint32_t inodeIndex) {
     inode.deserialize(buffer);
     return inode;
 }
+
+void DiskManager::allocateINodeAtIndex(uint32_t inodeIndex) {
+    if (inodeIndex >= MAX_INODES) return;
+    size_t byteIndex = inodeIndex / 8;
+    size_t bitIndex = inodeIndex % 8;
+    inodeBitmap[byteIndex] |= (1 << bitIndex); // 在位图中将对应位标记为已分配
+}
+
+void DiskManager::allocateBlockAtIndex(size_t blockIndex) {
+    if (blockIndex >= totalBlocks) return;
+    size_t byteIndex = blockIndex / 8;
+    size_t bitIndex = blockIndex % 8;
+    bitmap[byteIndex] |= (1 << bitIndex); // 在位图中将对应位标记为已分配
+}
+
+size_t DiskManager::calculateFreeBlocks() const {
+    size_t freeBlocks = 0;
+    // 遍历位图，统计未分配的块
+    for (size_t i = 0; i < totalBlocks; ++i) {
+        if (!isBlockAllocated(i)) {
+            ++freeBlocks;
+        }
+    }
+    return freeBlocks;
+}
+
+uint32_t DiskManager::calculateAllocatedInodes() const {
+    uint32_t allocatedInodes = 0;
+    // 遍历 inode 位图，统计已分配的 inode 数量
+    for (uint32_t i = 0; i < MAX_INODES; ++i) {
+        if (isINodeAllocated(i)) {
+            ++allocatedInodes;
+        }
+    }
+    return allocatedInodes;
+}
+

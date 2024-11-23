@@ -74,6 +74,19 @@ public:
 
     // 读取 inode
     INode readINode(uint32_t inodeIndex);
+
+    //在指定索引处分配一个 inode，用于修复文件系统不一致。
+    void allocateINodeAtIndex(uint32_t inodeIndex);
+
+    //在指定索引处分配一个数据块，用于修复文件系统不一致。
+    void allocateBlockAtIndex(size_t blockIndex);
+
+    //计算当前文件系统中空闲的块数量。
+    size_t calculateFreeBlocks() const;
+
+    //计算当前文件系统中已分配的 inode 数量。
+    uint32_t calculateAllocatedInodes() const;
+
 };
 
 #endif // DISKMANAGER_H

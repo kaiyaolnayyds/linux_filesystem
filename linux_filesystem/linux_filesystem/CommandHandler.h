@@ -4,6 +4,7 @@
 #include <string>
 #include "DiskManager.h"
 #include <fstream>
+#include <unordered_set>
 #include "Directory.h"
 #include "SuperBlock.h"
 #include "INode.h" // 包含 INode.h 文件，用于处理 inode 相关操作
@@ -18,6 +19,10 @@ public:
     Directory currentDirectory;     ///< 当前所在的目录对象
     uint32_t currentInodeIndex;     ///< 当前目录对应的 inode 索引
     std::string currentPath;        ///< 当前所在的路径（字符串表示）
+
+    // 用于跟踪使用的 inode 和数据块
+    std::unordered_set<uint32_t> usedInodes;
+    std::unordered_set<uint32_t> usedBlocks;
 
     /**
      * @brief 构造函数，初始化 CommandHandler 对象。
@@ -150,6 +155,12 @@ public:
  */
     bool navigateToPath(const std::string& path, uint32_t& resultInodeIndex, Directory& resultDirectory);
 
+    /**
+       * @brief 递归遍历文件系统，从指定的 inode 开始。
+       * @param inodeIndex 起始 inode 的索引。
+       * 该函数会收集所有正在使用的 inode 和数据块信息。
+       */
+    void traverseFileSystem(uint32_t inodeIndex);
 };
 
 #endif // COMMANDHANDLER_H
