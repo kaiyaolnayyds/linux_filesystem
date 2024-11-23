@@ -113,7 +113,7 @@
 
 1. **克隆仓库**
    
-   `git clone https://github.com/your_username/simdiskfs.git cd simdiskfs`
+   `https://github.com/kaiyaolnayyds/linux_filesystem.git`
 
 2. **创建构建目录并生成 Makefile**
    
@@ -139,9 +139,7 @@
   - **密码**：`admin123`
 
 - 登录成功后，您将看到命令提示符：
-  
-  
-  
+
   `admin@simdisk:/>`
 
 ### 命令语法
