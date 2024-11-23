@@ -571,6 +571,15 @@ void CommandHandler::handleNewFile(const std::string& fileName) {
         return;
     }
 
+    // **读取当前目录的 inode**
+    INode currentDirInode = diskManager.readINode(currentInodeIndex);
+
+    // **权限检查：检查对当前目录的写入权限**
+    if (!checkPermission(currentDirInode, 'w')) {
+        std::cout << "Permission denied: Cannot create file '" << fileName << "' in the current directory." << std::endl;
+        return;
+    }
+
     // 2. 分配新的 inode
     uint32_t newInodeIndex = diskManager.allocateINode();
     if (newInodeIndex == static_cast<uint32_t>(-1)) {
@@ -579,11 +588,22 @@ void CommandHandler::handleNewFile(const std::string& fileName) {
     }
 
     // 3. 初始化新文件的 inode
+     // 创建新的 inode
     INode newInode;
-    newInode.size = 0;             // 文件大小为 0
-    newInode.mode = 0644;          // 默认权限，可根据需要调整
-    newInode.type = 0;             // 文件类型，0 表示普通文件
     newInode.inodeIndex = newInodeIndex;
+    newInode.type = 0; // 普通文件
+    newInode.size = 0; // 初始大小为 0
+    newInode.blockIndex = 0; // 尚未分配数据块
+    newInode.ownerUID = userManager.getCurrentUID(); // 设置所有者 UID
+
+    // **根据用户类型设置权限位**
+    if (userManager.isAdmin()) {
+        newInode.mode = 0644; // rw-r--r--
+    }
+    else {
+        newInode.mode = 0664; // rw-rw-r--
+    }
+
 
     // 4. 可选：分配数据块（对于空文件，可以不分配）
     // 如果需要预先分配一个数据块，可以取消以下注释
@@ -600,9 +620,6 @@ void CommandHandler::handleNewFile(const std::string& fileName) {
     diskManager.updateSuperBlock(diskManager.superBlock);
     */
 
-    // 对于空文件，不分配数据块，设置 blockIndex 为 0 或特殊值
-    newInode.blockIndex = 0;
-
     // 5. 将新文件的 inode 写入磁盘
     diskManager.writeINode(newInodeIndex, newInode);
 
@@ -610,9 +627,6 @@ void CommandHandler::handleNewFile(const std::string& fileName) {
     currentDirectory.addEntry(fileName, newInodeIndex);
 
     // 将更新后的当前目录写回磁盘
-    // 获取当前目录的 inode
-    INode currentDirInode = diskManager.readINode(currentInodeIndex);
-
     // 序列化当前目录并写入磁盘
     std::vector<char> buffer;
     currentDirectory.serialize(buffer, diskManager.blockSize);
@@ -647,9 +661,26 @@ void CommandHandler::handleWriteFile(const std::string& fileName, bool append) {
             std::cout << "'" << fileName << "' is not a regular file." << std::endl;
             return;
         }
+
+        // **权限检查：写入权限**
+        if (!checkPermission(fileInode, 'w')) {
+            std::cout << "Permission denied: Cannot write to file '" << fileName << "'." << std::endl;
+            return;
+        }
+
     }
     else {
         // 文件不存在，在当前目录下创建新文件
+
+        // **读取当前目录的 inode**
+        INode currentDirInode = diskManager.readINode(currentInodeIndex);
+
+        // **权限检查：对当前目录的写入权限**
+        if (!checkPermission(currentDirInode, 'w')) {
+            std::cout << "Permission denied: Cannot create file '" << fileName << "' in the current directory." << std::endl;
+            return;
+        }
+
         // 分配新的 inode
         fileInodeIndex = diskManager.allocateINode();
         if (fileInodeIndex == static_cast<uint32_t>(-1)) {
@@ -659,16 +690,23 @@ void CommandHandler::handleWriteFile(const std::string& fileName, bool append) {
 
         // 初始化新文件的 inode
         fileInode.size = 0;             // 文件大小为 0
-        fileInode.mode = 0644;          // 默认权限，可根据需要调整
         fileInode.type = 0;             // 文件类型，0 表示普通文件
         fileInode.inodeIndex = fileInodeIndex;
         fileInode.blockIndex = 0;       // 还未分配数据块
+        fileInode.ownerUID = userManager.getCurrentUID(); // 设置所有者 UID
+
+        // **根据用户类型设置权限位**
+        if (userManager.isAdmin()) {
+            fileInode.mode = 0644; // rw-r--r--
+        }
+        else {
+            fileInode.mode = 0664; // rw-rw-r--
+        }
 
         // 在当前目录中添加新文件的目录项
         currentDirectory.addEntry(fileName, fileInodeIndex);
 
         // 将更新后的当前目录写回磁盘
-        INode currentDirInode = diskManager.readINode(currentInodeIndex);
         std::vector<char> buffer;
         currentDirectory.serialize(buffer, diskManager.blockSize);
         diskManager.writeBlock(currentDirInode.blockIndex, buffer.data());
@@ -686,7 +724,7 @@ void CommandHandler::handleWriteFile(const std::string& fileName, bool append) {
         fileContent += line + "\n";
     }
 
-    // 如果是追加模式，读取原有内容并追加,append有点Bug，后面再维护
+    // 如果是追加模式，读取原有内容并追加
     if (append && fileExists && fileInode.size > 0) {
         // 读取原有内容
         char* buffer = new char[fileInode.size];
@@ -719,10 +757,6 @@ void CommandHandler::handleWriteFile(const std::string& fileName, bool append) {
         diskManager.superBlock.freeBlocks--;
         diskManager.updateSuperBlock(diskManager.superBlock);
     }
-    else {
-        // 文件已有数据块，在本实现中直接覆盖
-        // 如果需要支持文件内容超过一个数据块的情况，需要实现多块管理
-    }
 
     // 4. 将文件内容写入数据块
     char* buffer = new char[diskManager.blockSize];
@@ -736,6 +770,7 @@ void CommandHandler::handleWriteFile(const std::string& fileName, bool append) {
 
     std::cout << "Content written to '" << fileName << "' successfully." << std::endl;
 }
+
 
 
 
@@ -790,6 +825,12 @@ void CommandHandler::handleCat(const std::string& filePath) {
         return;
     }
 
+    // **权限检查：读取权限**
+    if (!checkPermission(fileInode, 'r')) {
+        std::cout << "Permission denied: Cannot read file '" << fileName << "'." << std::endl;
+        return;
+    }
+
     // 5. 读取文件内容
     if (fileInode.size == 0) {
         std::cout << "File '" << fileName << "' is empty." << std::endl;
@@ -812,6 +853,7 @@ void CommandHandler::handleCat(const std::string& filePath) {
 
     delete[] buffer;
 }
+
 
 
 void CommandHandler::handleCopy(const std::string& src, const std::string& dest) {
@@ -1000,6 +1042,11 @@ bool CommandHandler::checkPermission(const INode& inode, char permissionType) {
         return false;
     }
 
+    // **管理员拥有所有权限**
+    if (userManager.isAdmin()) {
+        return true;
+    }
+
     int currentUID = userManager.getCurrentUID();
 
     uint16_t permissions = inode.mode;
@@ -1031,3 +1078,4 @@ bool CommandHandler::checkPermission(const INode& inode, char permissionType) {
         return (otherPerms & requiredPerm) != 0;
     }
 }
+

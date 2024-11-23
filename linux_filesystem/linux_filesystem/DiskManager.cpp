@@ -46,7 +46,7 @@ void DiskManager::initialize() {
     file.close();
 
     // 初始化超级块
-    superBlock = SuperBlock(static_cast<uint32_t>(totalBlocks), static_cast<uint32_t>(totalBlocks), 0, 0,0);
+    superBlock = SuperBlock(static_cast<uint32_t>(totalBlocks), static_cast<uint32_t>(totalBlocks), 0, 0, 0);
 
     // 计算超级块和位图的大小
     size_t superBlockSize = SUPERBLOCK_SIZE; // 使用固定大小
