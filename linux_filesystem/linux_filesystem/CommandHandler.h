@@ -26,6 +26,16 @@ public:
     std::unordered_set<uint32_t> usedInodes;  //已使用inodes
     std::unordered_set<uint32_t> usedBlocks;  //已使用数据块
 
+    // 存储最后一次命令的输出
+    std::string lastOutput;
+  
+    // 获取最后一次命令的输出
+    std::string getLastOutput() const;
+
+    // 设置最后一次命令的输出（清空或设置）
+    void setLastOutput(const std::string& output);
+
+
     /**
      * @brief 构造函数，初始化 CommandHandler 对象。
      * @param dm 磁盘管理器对象的引用。

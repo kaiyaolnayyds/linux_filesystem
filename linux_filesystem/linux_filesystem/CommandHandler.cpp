@@ -4,6 +4,15 @@
 #include <sstream>
 
 
+std::string CommandHandler::getLastOutput() const
+{
+    return lastOutput;
+}
+
+void CommandHandler::setLastOutput(const std::string& output) {
+    lastOutput = output;
+}
+
 CommandHandler::CommandHandler(DiskManager& diskManager, UserManager& userManager)
     : diskManager(diskManager), userManager(userManager) {
     // ¼ÓÔØ³¬¼¶¿é
