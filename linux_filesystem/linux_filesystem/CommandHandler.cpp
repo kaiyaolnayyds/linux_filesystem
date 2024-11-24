@@ -43,13 +43,20 @@ CommandHandler::CommandHandler(DiskManager& diskManager, UserManager& userManage
 
 
 bool CommandHandler::handleCommand(const std::string& command) {
+    // 清空 lastOutput
+    lastOutput.clear();
+
     std::istringstream iss(command);
     std::string cmd;
     iss >> cmd;
+    
+    // 将解析的命令存储到 lastOutput 以供调试
+    lastOutput = "Received command: [" + command + "]\n";
+    lastOutput += "Parsed command: [" + cmd + "]\n";
 
     if (cmd == "logout") {
         userManager.logout();
-        std::cout << "Logged out." << std::endl;
+        lastOutput = "Logged out.\n";
         return true; // 返回 true，表示需要注销
     }
     else if (cmd == "info") {
@@ -58,7 +65,6 @@ bool CommandHandler::handleCommand(const std::string& command) {
     else if (cmd == "cd") {
         std::string path;
         iss >> path;
-        path;
         handleCd(path);
     }
     else if (cmd == "dir") {
@@ -119,13 +125,15 @@ bool CommandHandler::handleCommand(const std::string& command) {
         handleCheck();
     }
     else {
-        std::cout << "Unknown command: " << cmd << std::endl;
+        lastOutput = "Unknown command: " + cmd + "\n";
     }
-    return false; //未注销，返回false
+    return false; // 未注销，返回 false
 }
 
 void CommandHandler::handleInfo() {
-    std::cout << "File System Information:" << std::endl;
+    std::ostringstream oss;
+
+    oss << "File System Information:" << std::endl;
 
     // 在获取超级块信息之前，更新使用情况
     diskManager.updateSuperBlockUsage();
@@ -149,25 +157,29 @@ void CommandHandler::handleInfo() {
     uint32_t allocatedInodes = sb.inodeCount;
     uint32_t freeInodes = MAX_INODES - allocatedInodes;
 
-    // 显示信息
-    std::cout << "----------------------------------------" << std::endl;
-    std::cout << "Block Size       : " << blockSize << " bytes" << std::endl;
-    std::cout << "Total Blocks     : " << totalBlocks << std::endl;
-    std::cout << "Used Blocks      : " << usedBlocks << std::endl;
-    std::cout << "Free Blocks      : " << freeBlocks << std::endl;
-    std::cout << "Total Size       : " << totalSize << " bytes" << std::endl;
-    std::cout << "Used Size        : " << usedSize << " bytes" << std::endl;
-    std::cout << "Free Size        : " << freeSize << " bytes" << std::endl;
-    std::cout << "----------------------------------------" << std::endl;
-    std::cout << "Total Inodes     : " << MAX_INODES << std::endl;
-    std::cout << "Allocated Inodes : " << allocatedInodes << std::endl;
-    std::cout << "Free Inodes      : " << freeInodes << std::endl;
-    std::cout << "----------------------------------------" << std::endl;
-    std::cout << "Root Inode Index : " << sb.rootInode << std::endl;
-    std::cout << "INode Start Addr : " << sb.inodeStartAddress << std::endl;
-    std::cout << "Data Block Start : " << sb.dataBlockStartAddress << std::endl;
-    std::cout << "----------------------------------------" << std::endl;
+    // 构建信息字符串
+    oss << "----------------------------------------" << std::endl;
+    oss << "Block Size       : " << blockSize << " bytes" << std::endl;
+    oss << "Total Blocks     : " << totalBlocks << std::endl;
+    oss << "Used Blocks      : " << usedBlocks << std::endl;
+    oss << "Free Blocks      : " << freeBlocks << std::endl;
+    oss << "Total Size       : " << totalSize << " bytes" << std::endl;
+    oss << "Used Size        : " << usedSize << " bytes" << std::endl;
+    oss << "Free Size        : " << freeSize << " bytes" << std::endl;
+    oss << "----------------------------------------" << std::endl;
+    oss << "Total Inodes     : " << MAX_INODES << std::endl;
+    oss << "Allocated Inodes : " << allocatedInodes << std::endl;
+    oss << "Free Inodes      : " << freeInodes << std::endl;
+    oss << "----------------------------------------" << std::endl;
+    oss << "Root Inode Index : " << sb.rootInode << std::endl;
+    oss << "INode Start Addr : " << sb.inodeStartAddress << std::endl;
+    oss << "Data Block Start : " << sb.dataBlockStartAddress << std::endl;
+    oss << "----------------------------------------" << std::endl;
+
+    // 将构建的字符串赋值给 lastOutput
+    lastOutput = oss.str();
 }
+
 
 
 void CommandHandler::handleCd(const std::string& path) {

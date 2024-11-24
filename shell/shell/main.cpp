@@ -9,144 +9,85 @@
 #include <unistd.h>
 #include <cstring>
 
-#define SHM_KEY 0x1234  // 这是有效的键值
-#define COMMAND_SIZE 256
-#define RESPONSE_SIZE 2048
+#define SHM_KEY 0x1234
+#define SEM_COMMAND "/sem_command"
+#define SEM_RESPONSE "/sem_response"
 
 struct SharedMemorySegment {
-    char command[COMMAND_SIZE];
-    char response[RESPONSE_SIZE];
-    int commandReady;
-    int responseReady;
+    char command[1024];
+    char response[4096];
+    bool commandReady;
+    bool responseReady;
 };
 
 int main() {
-    // 连接共享内存
-    int shm_id = shmget(SHM_KEY, sizeof(SharedMemorySegment), 0666);
-    if (shm_id == -1) {
-        std::cerr << "Failed to get shared memory." << std::endl;
+    // 连接到共享内存
+    int shmid = shmget(SHM_KEY, sizeof(SharedMemorySegment), 0666);
+    if (shmid < 0) {
+        std::cerr << "Failed to get shared memory. Is simdisk running?" << std::endl;
         exit(EXIT_FAILURE);
     }
 
-    SharedMemorySegment* shm_ptr = (SharedMemorySegment*)shmat(shm_id, NULL, 0);
-    if (shm_ptr == (void*)-1) {
+    SharedMemorySegment* sharedMemory = (SharedMemorySegment*)shmat(shmid, nullptr, 0);
+    if (sharedMemory == (void*)-1) {
         std::cerr << "Failed to attach shared memory." << std::endl;
         exit(EXIT_FAILURE);
     }
 
     // 打开信号量
-    sem_t* command_sem = sem_open("/simdisk_command_sem", 0);
-    sem_t* response_sem = sem_open("/simdisk_response_sem", 0);
+    sem_t* semCommand = sem_open(SEM_COMMAND, 0);
+    sem_t* semResponse = sem_open(SEM_RESPONSE, 0);
 
-    if (command_sem == SEM_FAILED || response_sem == SEM_FAILED) {
+    if (semCommand == SEM_FAILED || semResponse == SEM_FAILED) {
         std::cerr << "Failed to open semaphores." << std::endl;
         exit(EXIT_FAILURE);
     }
 
-    // 会话状态
-    bool isLoggedIn = false;
-
-    // 登录循环
-    while (!isLoggedIn) {
-        std::string username, password;
-
-        std::cout << "SimDisk Login\nUsername: ";
-        std::getline(std::cin, username);
-        std::cout << "Password: ";
-        std::getline(std::cin, password);
-
-        // 发送登录命令到后台进程
-        std::string loginCommand = "login " + username + " " + password;
-
-        // 发送命令
-        sem_wait(command_sem);
-        strncpy(shm_ptr->command, loginCommand.c_str(), COMMAND_SIZE - 1);
-        shm_ptr->command[COMMAND_SIZE - 1] = '\0';
-        shm_ptr->commandReady = 1;
-        sem_post(command_sem);
-
-        // 等待响应
-        while (true) {
-            sem_wait(response_sem);
-            if (shm_ptr->responseReady == 1) {
-                // 读取响应
-                std::string response = shm_ptr->response;
-                shm_ptr->responseReady = 0;
-                sem_post(response_sem);
-                std::cout << response << std::endl;
-
-                if (response.find("Login successful") != std::string::npos) {
-                    isLoggedIn = true;
-                }
-                break;
-            }
-            sem_post(response_sem);
-            // 睡眠，避免忙等待
-            usleep(100000); // 100ms
-        }
-    }
-
-    // 主循环
+    // 命令输入循环
+    std::string command;
     while (true) {
-        std::cout << "simdisk> ";
-        std::string userInput;
-        std::getline(std::cin, userInput);
+        // 显示提示符
+        std::cout << "shell> ";
+        std::getline(std::cin, command);
 
-        if (userInput == "exit") {
-            // 可以选择发送 logout 命令
-            // 发送命令
-            sem_wait(command_sem);
-            strncpy(shm_ptr->command, "logout", COMMAND_SIZE - 1);
-            shm_ptr->command[COMMAND_SIZE - 1] = '\0';
-            shm_ptr->commandReady = 1;
-            sem_post(command_sem);
-
-            // 等待响应
-            while (true) {
-                sem_wait(response_sem);
-                if (shm_ptr->responseReady == 1) {
-                    // 读取响应
-                    std::string response = shm_ptr->response;
-                    shm_ptr->responseReady = 0;
-                    sem_post(response_sem);
-                    std::cout << response << std::endl;
-                    break;
-                }
-                sem_post(response_sem);
-                usleep(100000); // 100ms
-            }
+        if (command == "exit") {
             break;
         }
 
-        // 发送命令到后台进程
-        sem_wait(command_sem);
-        strncpy(shm_ptr->command, userInput.c_str(), COMMAND_SIZE - 1);
-        shm_ptr->command[COMMAND_SIZE - 1] = '\0';
-        shm_ptr->commandReady = 1;
-        sem_post(command_sem);
+
+        // 将命令发送给 simdisk
+        sem_wait(semCommand); // 获取信号量
+
+        // 清空共享内存中的命令缓冲区
+        memset(sharedMemory->command, 0, sizeof(sharedMemory->command));
+
+        strncpy(sharedMemory->command, command.c_str(), sizeof(sharedMemory->command) - 1);
+        sharedMemory->commandReady = true;
+
+        // 通知 simdisk 命令已准备好
+        sem_post(semResponse);
 
         // 等待响应
-        while (true) {
-            sem_wait(response_sem);
-            if (shm_ptr->responseReady == 1) {
-                // 读取响应
-                std::string response = shm_ptr->response;
-                shm_ptr->responseReady = 0;
-                sem_post(response_sem);
-                std::cout << response << std::endl;
-                break;
-            }
-            sem_post(response_sem);
-            // 睡眠，避免忙等待
-            usleep(100000); // 100ms
+        sem_wait(semCommand);
+        if (sharedMemory->responseReady) {
+            std::string response(sharedMemory->response);
+            sharedMemory->responseReady = false;
+
+            // 显示响应
+            std::cout << response << std::endl;
         }
+        else {
+            std::cout << "No response from simdisk." << std::endl;
+        }
+
+        // 释放信号量
+        sem_post(semCommand);
     }
 
     // 清理资源
-    shmdt(shm_ptr); // 分离共享内存
-
-    sem_close(command_sem);
-    sem_close(response_sem);
+    shmdt(sharedMemory);
+    sem_close(semCommand);
+    sem_close(semResponse);
 
     return 0;
 }
